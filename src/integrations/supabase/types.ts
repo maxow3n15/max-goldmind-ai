@@ -14,7 +14,246 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ai_analyses: {
+        Row: {
+          bias: string | null
+          confidence: number | null
+          created_at: string
+          explanation: string
+          id: string
+          setup: Json
+          symbol: string
+          timeframe: string
+          user_id: string
+        }
+        Insert: {
+          bias?: string | null
+          confidence?: number | null
+          created_at?: string
+          explanation: string
+          id?: string
+          setup: Json
+          symbol?: string
+          timeframe: string
+          user_id: string
+        }
+        Update: {
+          bias?: string | null
+          confidence?: number | null
+          created_at?: string
+          explanation?: string
+          id?: string
+          setup?: Json
+          symbol?: string
+          timeframe?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      paper_account: {
+        Row: {
+          balance: number
+          equity: number
+          free_margin: number
+          margin_used: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          equity?: number
+          free_margin?: number
+          margin_used?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          equity?: number
+          free_margin?: number
+          margin_used?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      trades: {
+        Row: {
+          ai_analysis: Json | null
+          closed_at: string | null
+          confidence: number | null
+          direction: string
+          entry_price: number
+          exit_price: number | null
+          id: string
+          lot_size: number
+          mode: string
+          opened_at: string
+          pnl: number | null
+          reason_entry: string | null
+          reason_exit: string | null
+          risk_reward: number | null
+          session: string | null
+          status: string
+          stop_loss: number
+          symbol: string
+          take_profit_1: number | null
+          take_profit_2: number | null
+          take_profit_3: number | null
+          timeframe: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_analysis?: Json | null
+          closed_at?: string | null
+          confidence?: number | null
+          direction: string
+          entry_price: number
+          exit_price?: number | null
+          id?: string
+          lot_size?: number
+          mode?: string
+          opened_at?: string
+          pnl?: number | null
+          reason_entry?: string | null
+          reason_exit?: string | null
+          risk_reward?: number | null
+          session?: string | null
+          status?: string
+          stop_loss: number
+          symbol?: string
+          take_profit_1?: number | null
+          take_profit_2?: number | null
+          take_profit_3?: number | null
+          timeframe?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_analysis?: Json | null
+          closed_at?: string | null
+          confidence?: number | null
+          direction?: string
+          entry_price?: number
+          exit_price?: number | null
+          id?: string
+          lot_size?: number
+          mode?: string
+          opened_at?: string
+          pnl?: number | null
+          reason_entry?: string | null
+          reason_exit?: string | null
+          risk_reward?: number | null
+          session?: string | null
+          status?: string
+          stop_loss?: number
+          symbol?: string
+          take_profit_1?: number | null
+          take_profit_2?: number | null
+          take_profit_3?: number | null
+          timeframe?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_settings: {
+        Row: {
+          auto_execute: boolean
+          avoid_news: boolean
+          created_at: string
+          live_trading_enabled: boolean
+          max_daily_loss: number
+          max_open_trades: number
+          max_trades_per_day: number
+          max_weekly_loss: number
+          notify_browser: boolean
+          notify_email: boolean
+          preferred_session: string
+          preferred_timeframe: string
+          risk_per_trade: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_execute?: boolean
+          avoid_news?: boolean
+          created_at?: string
+          live_trading_enabled?: boolean
+          max_daily_loss?: number
+          max_open_trades?: number
+          max_trades_per_day?: number
+          max_weekly_loss?: number
+          notify_browser?: boolean
+          notify_email?: boolean
+          preferred_session?: string
+          preferred_timeframe?: string
+          risk_per_trade?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_execute?: boolean
+          avoid_news?: boolean
+          created_at?: string
+          live_trading_enabled?: boolean
+          max_daily_loss?: number
+          max_open_trades?: number
+          max_trades_per_day?: number
+          max_weekly_loss?: number
+          notify_browser?: boolean
+          notify_email?: boolean
+          preferred_session?: string
+          preferred_timeframe?: string
+          risk_per_trade?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
