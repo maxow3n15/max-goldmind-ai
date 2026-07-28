@@ -57,27 +57,27 @@ function SettingsPage() {
 
       <Section title="Risk management">
         <div className="grid md:grid-cols-2 gap-4">
-          <Field label="Risk per trade (%)" v={form.risk_per_trade} onChange={(v) => upd("risk_per_trade", v)} type="number" step="0.1" />
-          <Field label="Max daily loss (%)" v={form.max_daily_loss} onChange={(v) => upd("max_daily_loss", v)} type="number" step="0.1" />
-          <Field label="Max weekly loss (%)" v={form.max_weekly_loss} onChange={(v) => upd("max_weekly_loss", v)} type="number" step="0.1" />
-          <Field label="Max trades / day" v={form.max_trades_per_day} onChange={(v) => upd("max_trades_per_day", v)} type="number" />
-          <Field label="Max open trades" v={form.max_open_trades} onChange={(v) => upd("max_open_trades", v)} type="number" />
+          <Field label="Risk per trade (%)" v={form.risk_per_trade} onChange={(v: any) => upd("risk_per_trade", v)} type="number" step="0.1" />
+          <Field label="Max daily loss (%)" v={form.max_daily_loss} onChange={(v: any) => upd("max_daily_loss", v)} type="number" step="0.1" />
+          <Field label="Max weekly loss (%)" v={form.max_weekly_loss} onChange={(v: any) => upd("max_weekly_loss", v)} type="number" step="0.1" />
+          <Field label="Max trades / day" v={form.max_trades_per_day} onChange={(v: any) => upd("max_trades_per_day", v)} type="number" />
+          <Field label="Max open trades" v={form.max_open_trades} onChange={(v: any) => upd("max_open_trades", v)} type="number" />
         </div>
       </Section>
 
       <Section title="Trading preferences">
         <div className="grid md:grid-cols-2 gap-4">
-          <SelectField label="Preferred timeframe" v={form.preferred_timeframe} onChange={(v) => upd("preferred_timeframe", v)}
+          <SelectField label="Preferred timeframe" v={form.preferred_timeframe} onChange={(v: any) => upd("preferred_timeframe", v)}
             options={[["1","1m"],["5","5m"],["15","15m"],["30","30m"],["60","1H"],["240","4H"],["D","1D"]]} />
-          <SelectField label="Preferred session" v={form.preferred_session} onChange={(v) => upd("preferred_session", v)}
+          <SelectField label="Preferred session" v={form.preferred_session} onChange={(v: any) => upd("preferred_session", v)}
             options={[["Asian","Asian"],["London","London"],["New York","New York"]]} />
         </div>
-        <Toggle label="Avoid trading around high-impact news" v={form.avoid_news} onChange={(v) => upd("avoid_news", v)} />
+        <Toggle label="Avoid trading around high-impact news" v={form.avoid_news} onChange={(v: any) => upd("avoid_news", v)} />
       </Section>
 
       <Section title="Notifications">
-        <Toggle label="Browser notifications" v={form.notify_browser} onChange={(v) => upd("notify_browser", v)} />
-        <Toggle label="Email notifications" v={form.notify_email} onChange={(v) => upd("notify_email", v)} />
+        <Toggle label="Browser notifications" v={form.notify_browser} onChange={(v: any) => upd("notify_browser", v)} />
+        <Toggle label="Email notifications" v={form.notify_email} onChange={(v: any) => upd("notify_email", v)} />
       </Section>
 
       <Section title="Live trading">
@@ -85,8 +85,8 @@ function SettingsPage() {
           <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
           <span>Live MT5 execution isn't connected yet in this build. Enabling this only reveals the placeholder connection screen — no real orders are sent.</span>
         </div>
-        <Toggle label="Enable live trading UI (paper only for now)" v={form.live_trading_enabled} onChange={(v) => upd("live_trading_enabled", v)} />
-        <Toggle label="Auto-execute AI setups" v={form.auto_execute} onChange={(v) => upd("auto_execute", v)} />
+        <Toggle label="Enable live trading UI (paper only for now)" v={form.live_trading_enabled} onChange={(v: any) => upd("live_trading_enabled", v)} />
+        <Toggle label="Auto-execute AI setups" v={form.auto_execute} onChange={(v: any) => upd("auto_execute", v)} />
       </Section>
 
       <div className="flex justify-end">
