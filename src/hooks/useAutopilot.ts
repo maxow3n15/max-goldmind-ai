@@ -1,0 +1,309 @@
+// useAutopilot — the autonomous orchestrator.
+//
+// Runs entirely client-side while the Autopilot page is open. It:
+//   1. Watches the live market feed.
+//   2. Every N seconds (or on price drift) runs AI analysis.
+//   3. Computes weighted confluence + full safety report.
+//   4. If enabled AND every safety check passes → submits a paper trade
+//      via the ExecutionEngine.
+//   5. On every tick, evaluates every OPEN trade through the position
+//      manager and moves stops or closes as needed.
+//   6. Maintains a kill-switch and an in-memory event log.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { useMarketData } from "@/hooks/useMarketData";
+import { analyzeMarket } from "@/lib/ai.functions";
+import { getAccountSnapshot, listTrades } from "@/lib/trades.functions";
+import { getUserSettings } from "@/lib/settings.functions";
+import { computeConfluence } from "@/lib/services/confidence";
+import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
+import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
+import { computeLotSize, createPaperExecutionEngine } from "@/lib/services/execution";
+import type {
+  AutopilotEvent,
+  ConfluenceReport,
+  KillSwitchState,
+  SafetyReport,
+  TradePlan,
+} from "@/lib/services/types";
+import { currentSession } from "@/lib/format";
+
+interface Options {
+  timeframe: string;
+  analysisIntervalMs?: number;
+}
+
+export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options) {
+  const qc = useQueryClient();
+  const market = useMarketData({ intervalMs: 3000 });
+
+  const analyzeFn = useServerFn(analyzeMarket);
+  const settingsFn = useServerFn(getUserSettings);
+  const snapFn = useServerFn(getAccountSnapshot);
+  const tradesFn = useServerFn(listTrades);
+
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn() });
+  const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
+  const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
+
+  const [running, setRunning] = useState(false);
+  const [killSwitch, setKillSwitch] = useState<KillSwitchState>({ active: false, reason: null, since: null });
+  const [events, setEvents] = useState<AutopilotEvent[]>([]);
+  const [analysis, setAnalysis] = useState<any | null>(null);
+  const [confluence, setConfluence] = useState<ConfluenceReport | null>(null);
+  const [safety, setSafety] = useState<SafetyReport | null>(null);
+  const [lastRejection, setLastRejection] = useState<string | null>(null);
+  const [lastPlan, setLastPlan] = useState<TradePlan | null>(null);
+  const [analysing, setAnalysing] = useState(false);
+
+  const executor = useMemo(() => createPaperExecutionEngine(useServerFn), []);
+  const inFlightRef = useRef(false);
+  const lastAnalyseRef = useRef(0);
+  const lastAnalysedPriceRef = useRef<number | null>(null);
+  const managedRef = useRef<Set<string>>(new Set());
+
+  const log = useCallback((level: AutopilotEvent["level"], message: string, detail?: string) => {
+    setEvents((prev) => {
+      const next: AutopilotEvent = {
+        id: crypto.randomUUID(),
+        ts: Date.now(),
+        level, message, detail,
+      };
+      return [next, ...prev].slice(0, 100);
+    });
+  }, []);
+
+  const triggerKillSwitch = useCallback((reason: string) => {
+    setKillSwitch({ active: true, reason, since: Date.now() });
+    setRunning(false);
+    log("error", "Kill switch triggered", reason);
+    toast.error(`Autopilot stopped: ${reason}`);
+  }, [log]);
+
+  const resetKillSwitch = useCallback(() => {
+    setKillSwitch({ active: false, reason: null, since: null });
+    log("info", "Kill switch cleared");
+  }, [log]);
+
+  // Consecutive losses (from most recent closed trades).
+  const consecutiveLosses = useMemo(() => {
+    const closed = (trades.data ?? []).filter((t: any) => t.status === "closed" && t.pnl != null)
+      .sort((a: any, b: any) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime());
+    let n = 0;
+    for (const t of closed) {
+      if (Number(t.pnl) < 0) n += 1; else break;
+    }
+    return n;
+  }, [trades.data]);
+
+  const todayTradeCount = useMemo(() => {
+    const day = new Date(); day.setUTCHours(0, 0, 0, 0);
+    return (trades.data ?? []).filter((t: any) => new Date(t.opened_at) >= day).length;
+  }, [trades.data]);
+
+  const openTrades: OpenTrade[] = useMemo(() =>
+    (trades.data ?? []).filter((t: any) => t.status === "open").map((t: any) => ({
+      id: t.id,
+      direction: t.direction,
+      entry_price: Number(t.entry_price),
+      stop_loss: Number(t.stop_loss),
+      take_profit_1: t.take_profit_1 != null ? Number(t.take_profit_1) : null,
+      take_profit_2: t.take_profit_2 != null ? Number(t.take_profit_2) : null,
+      take_profit_3: t.take_profit_3 != null ? Number(t.take_profit_3) : null,
+      lot_size: Number(t.lot_size),
+      opened_at: t.opened_at,
+    })), [trades.data]);
+
+  // --- Auto kill-switch triggers on data changes ---
+  useEffect(() => {
+    if (killSwitch.active || !running) return;
+    if (consecutiveLosses >= 3) triggerKillSwitch("3 consecutive losses");
+  }, [consecutiveLosses, running, killSwitch.active, triggerKillSwitch]);
+
+  useEffect(() => {
+    if (killSwitch.active || !running || !snapshot.data) return;
+    const bal = Number(snapshot.data?.account?.balance ?? 1) || 1;
+    const s = settings.data ?? {};
+    const dailyLossPct = -Math.min(0, Number(snapshot.data?.daily_pnl ?? 0)) / bal * 100;
+    const weeklyLossPct = -Math.min(0, Number(snapshot.data?.weekly_pnl ?? 0)) / bal * 100;
+    if (dailyLossPct >= Number(s.max_daily_loss ?? 3)) triggerKillSwitch(`Daily loss ${dailyLossPct.toFixed(2)}% reached`);
+    else if (weeklyLossPct >= Number(s.max_weekly_loss ?? 6)) triggerKillSwitch(`Weekly loss ${weeklyLossPct.toFixed(2)}% reached`);
+  }, [snapshot.data, settings.data, running, killSwitch.active, triggerKillSwitch]);
+
+  useEffect(() => {
+    if (killSwitch.active || !running) return;
+    if (market.status === "disconnected") triggerKillSwitch("Live price feed disconnected");
+  }, [market.status, running, killSwitch.active, triggerKillSwitch]);
+
+  // --- Analysis loop ---
+  const runAnalysisNow = useCallback(async () => {
+    if (analysing) return;
+    if (!market.quote?.mid) return;
+    setAnalysing(true);
+    try {
+      const res: any = await analyzeFn({ data: { timeframe, session: currentSession(), price: market.quote.mid } });
+      setAnalysis(res);
+      const conf = computeConfluence({
+        analysis: res,
+        htfBias: res?.bias ?? null,
+        spread: market.quote?.spread ?? null,
+      });
+      setConfluence(conf);
+      lastAnalysedPriceRef.current = market.quote.mid;
+      lastAnalyseRef.current = Date.now();
+      log("info", `Analysis refreshed — ${res?.bias ?? "?"} · ${conf.score}% confluence`);
+    } catch (e: any) {
+      log("error", "Analysis failed", e?.message);
+    } finally {
+      setAnalysing(false);
+    }
+  }, [analyzeFn, market.quote?.mid, market.quote?.spread, timeframe, analysing, log]);
+
+  // Cadence: every analysisIntervalMs, or when price drifts > 0.15%.
+  useEffect(() => {
+    if (!running) return;
+    const t = window.setInterval(() => {
+      const since = Date.now() - lastAnalyseRef.current;
+      const price = market.quote?.mid;
+      const last = lastAnalysedPriceRef.current;
+      const drift = price && last ? Math.abs(price - last) / last : 0;
+      if (since >= analysisIntervalMs || drift > 0.0015) runAnalysisNow();
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, [running, analysisIntervalMs, runAnalysisNow, market.quote?.mid]);
+
+  // --- Safety recompute whenever any input changes ---
+  useEffect(() => {
+    const report = runSafety({
+      analysis,
+      confluence,
+      quote: market.quote,
+      connection: market.status,
+      settings: settings.data,
+      snapshot: snapshot.data,
+      openTrades,
+      todayTradeCount,
+      consecutiveLosses,
+      killSwitch: { active: killSwitch.active, reason: killSwitch.reason },
+      autoExecuteEnabled: !!settings.data?.auto_execute,
+      execConnected: executor.connected,
+    });
+    setSafety(report);
+  }, [analysis, confluence, market.quote, market.status, settings.data, snapshot.data,
+      openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected]);
+
+  // --- Submit trade when everything aligns ---
+  useEffect(() => {
+    if (!running || killSwitch.active) return;
+    if (!safety?.ok || !analysis?.setup || !market.quote) return;
+    if (inFlightRef.current) return;
+
+    // Prevent duplicate submissions on the same setup snapshot.
+    const setup = analysis.setup;
+    const sigKey = `${setup.direction}:${setup.entry}:${setup.stop_loss}:${setup.take_profit_1}`;
+    if (managedRef.current.has(sigKey)) return;
+
+    const balance = Number(snapshot.data?.account?.balance ?? 10000);
+    const riskPct = Number(settings.data?.risk_per_trade ?? 1);
+    const lots = computeLotSize({ balance, riskPct, entry: Number(setup.entry), stop_loss: Number(setup.stop_loss) });
+
+    const plan: TradePlan = {
+      direction: setup.direction,
+      entry: Number(setup.entry),
+      stop_loss: Number(setup.stop_loss),
+      take_profit_1: Number(setup.take_profit_1),
+      take_profit_2: setup.take_profit_2 != null ? Number(setup.take_profit_2) : null,
+      take_profit_3: setup.take_profit_3 != null ? Number(setup.take_profit_3) : null,
+      lot_size: lots,
+      risk_reward: Number(setup.risk_reward ?? 0),
+      confidence: Number(confluence?.score ?? analysis.confidence ?? 0),
+      timeframe,
+      session: currentSession(),
+      reason: analysis.explanation ?? "Autopilot",
+      ai_analysis: analysis,
+    };
+
+    inFlightRef.current = true;
+    managedRef.current.add(sigKey);
+    setLastPlan(plan);
+    executor.submit(plan)
+      .then((r) => {
+        log("success", `Opened ${plan.direction} @ ${plan.entry.toFixed(2)} · ${plan.lot_size} lots`,
+          `Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)}`);
+        toast.success("Autopilot opened a paper trade");
+        qc.invalidateQueries({ queryKey: ["trades"] });
+        qc.invalidateQueries({ queryKey: ["snapshot"] });
+        return r;
+      })
+      .catch((e) => {
+        log("error", "Order rejected by execution engine", e?.message);
+      })
+      .finally(() => { inFlightRef.current = false; });
+  }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
+      settings.data, confluence, timeframe, executor, log, qc]);
+
+  // Track rejection reasons for the UI (only when a setup exists and we
+  // would have wanted to trade but couldn't).
+  useEffect(() => {
+    if (!analysis?.setup) { setLastRejection(null); return; }
+    if (!safety) return;
+    setLastRejection(safety.ok ? null : safety.failingReasons[0] ?? null);
+  }, [safety, analysis?.setup]);
+
+  // --- Autonomous position management on every price tick ---
+  useEffect(() => {
+    if (!market.quote?.mid || openTrades.length === 0) return;
+    const price = market.quote.mid;
+    for (const t of openTrades) {
+      const action = evaluatePosition({ trade: t, price });
+      if (action.type === "none") continue;
+      const dedupeKey = `${t.id}:${action.type}:${"new_stop" in action ? action.new_stop : "close"}`;
+      if (managedRef.current.has(dedupeKey)) continue;
+      managedRef.current.add(dedupeKey);
+      if (action.type === "close") {
+        executor.closeAtPrice(t.id, action.price, action.reason)
+          .then((r) => {
+            log("success", `Closed ${t.direction} @ ${action.price.toFixed(2)}`,
+              `${action.reason} · P&L $${r.pnl.toFixed(2)}`);
+            qc.invalidateQueries({ queryKey: ["trades"] });
+            qc.invalidateQueries({ queryKey: ["snapshot"] });
+          })
+          .catch((e) => log("error", "Close failed", e?.message));
+      } else if (action.type === "move_stop") {
+        executor.updateStops(t.id, { stop_loss: action.new_stop })
+          .then(() => {
+            log("info", `Stop → ${action.new_stop.toFixed(2)}`, action.reason);
+            qc.invalidateQueries({ queryKey: ["trades"] });
+          })
+          .catch((e) => log("error", "Stop update failed", e?.message));
+      }
+    }
+  }, [market.quote?.mid, openTrades, executor, log, qc]);
+
+  const start = useCallback(() => {
+    if (killSwitch.active) {
+      toast.error("Clear the kill switch before restarting.");
+      return;
+    }
+    setRunning(true);
+    log("info", "Autopilot started");
+    runAnalysisNow();
+  }, [killSwitch.active, log, runAnalysisNow]);
+
+  const stop = useCallback(() => {
+    setRunning(false);
+    log("warn", "Autopilot paused by user");
+  }, [log]);
+
+  return {
+    running, killSwitch, events, analysis, confluence, safety,
+    lastRejection, lastPlan, analysing, market, snapshot: snapshot.data,
+    settings: settings.data, openTrades, executor,
+    consecutiveLosses, todayTradeCount,
+    start, stop, runAnalysisNow, triggerKillSwitch, resetKillSwitch,
+    constants: SAFETY_CONSTANTS,
+  };
+}
