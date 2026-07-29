@@ -139,6 +139,13 @@ function Dashboard() {
         <StatCard label="Win rate" value={fmtPct(snapshot.data?.win_rate ?? 0)} hint={`${snapshot.data?.closed_count ?? 0} closed · ${snapshot.data?.open_count ?? 0} open`} />
       </div>
 
+      <MarketStatusCard
+        quote={market.quote}
+        status={market.status}
+        lastUpdated={market.lastUpdated}
+        lastError={market.lastError}
+      />
+
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Chart */}
         <div className="lg:col-span-2 glass-panel rounded-2xl p-4">
