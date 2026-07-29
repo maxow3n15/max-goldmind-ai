@@ -32,6 +32,9 @@ function Dashboard() {
   const session = useMemo(() => currentSession(), []);
   const qc = useQueryClient();
 
+  const market = useMarketData();
+  const lastAnalyzedPriceRef = useRef<number | null>(null);
+
   const analyzeFn = useSFn(analyzeMarket);
   const openFn = useSFn(openPaperTrade);
   const closeFn = useSFn(closePaperTrade);
@@ -42,10 +45,25 @@ function Dashboard() {
   const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn() });
 
   const analyze = useMutation({
-    mutationFn: () => analyzeFn({ data: { timeframe, session } }),
+    mutationFn: () => analyzeFn({ data: { timeframe, session, price: market.quote?.mid } }),
     onError: (e: any) => toast.error(e?.message ?? "Analysis failed"),
-    onSuccess: () => toast.success("Analysis complete"),
+    onSuccess: () => {
+      lastAnalyzedPriceRef.current = market.quote?.mid ?? null;
+      toast.success("Analysis complete");
+    },
   });
+
+  // Auto-refresh analysis when price moves meaningfully (>0.15%) to avoid churn.
+  useEffect(() => {
+    const price = market.quote?.mid;
+    if (!price || !analyze.data) return;
+    const last = lastAnalyzedPriceRef.current;
+    if (last == null) return;
+    if (Math.abs(price - last) / last > 0.0015) {
+      analyze.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [market.quote?.mid]);
 
   const openTrade = useMutation({
     mutationFn: async () => {
