@@ -126,7 +126,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   useEffect(() => {
     if (killSwitch.active || !running || !snapshot.data) return;
     const bal = Number(snapshot.data?.account?.balance ?? 1) || 1;
-    const s = settings.data ?? {};
+    const s: any = settings.data ?? {};
     const dailyLossPct = -Math.min(0, Number(snapshot.data?.daily_pnl ?? 0)) / bal * 100;
     const weeklyLossPct = -Math.min(0, Number(snapshot.data?.weekly_pnl ?? 0)) / bal * 100;
     if (dailyLossPct >= Number(s.max_daily_loss ?? 3)) triggerKillSwitch(`Daily loss ${dailyLossPct.toFixed(2)}% reached`);

@@ -9,7 +9,7 @@ import type { ExecutionEngine, TradePlan } from "./types";
 import { openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { updateTradeStop } from "@/lib/autopilot.functions";
 
-type ServerCaller = <T extends (...args: any[]) => any>(fn: T) => T;
+type ServerCaller = (fn: any) => (...args: any[]) => any;
 
 export function createPaperExecutionEngine(useSFn: ServerCaller): ExecutionEngine {
   const open = useSFn(openPaperTrade);
