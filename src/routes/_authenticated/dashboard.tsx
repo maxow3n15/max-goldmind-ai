@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import { StatCard } from "@/components/StatCard";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
+import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
 import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
