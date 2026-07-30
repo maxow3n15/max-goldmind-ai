@@ -15,6 +15,10 @@ export const Route = createFileRoute("/_authenticated/autopilot")({
     meta: [
       { title: "Autopilot · GoldMind AI" },
       { name: "description", content: "Autonomous XAUUSD trading — analysis, safety checks, execution and position management in one control panel." },
+      { property: "og:title", content: "Autopilot · GoldMind AI" },
+      { property: "og:description", content: "Run paper-mode autonomous XAUUSD analysis, safety checks and trade management." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

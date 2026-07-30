@@ -9,6 +9,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "AI-powered gold market analysis using Smart Money Concepts. Real-time XAUUSD setups, explained decisions, risk-managed paper trading." },
       { property: "og:title", content: "GoldMind AI — XAUUSD Trading Intelligence" },
       { property: "og:description", content: "Institutional-grade gold analysis with transparent ICT reasoning." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

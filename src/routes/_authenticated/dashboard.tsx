@@ -18,6 +18,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
     meta: [
       { title: "Dashboard · GoldMind AI" },
       { name: "description", content: "Live XAUUSD dashboard: AI setups, session context, open trades and P&L." },
+      { property: "og:title", content: "Dashboard · GoldMind AI" },
+      { property: "og:description", content: "Monitor live XAUUSD analysis, paper trades, session context and P&L." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

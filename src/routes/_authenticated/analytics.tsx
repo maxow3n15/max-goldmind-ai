@@ -11,6 +11,10 @@ export const Route = createFileRoute("/_authenticated/analytics")({
     meta: [
       { title: "Analytics · GoldMind AI" },
       { name: "description", content: "Performance analytics for your XAUUSD trading: win rate, profit factor, drawdown, best sessions." },
+      { property: "og:title", content: "Analytics · GoldMind AI" },
+      { property: "og:description", content: "Track XAUUSD trading performance with win rate, profit factor and drawdown." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
