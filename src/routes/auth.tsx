@@ -10,6 +10,10 @@ export const Route = createFileRoute("/auth")({
     meta: [
       { title: "Sign in · GoldMind AI" },
       { name: "description", content: "Sign in or create your GoldMind AI trader account." },
+      { property: "og:title", content: "Sign in · GoldMind AI" },
+      { property: "og:description", content: "Access your secure GoldMind AI XAUUSD trading workspace." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

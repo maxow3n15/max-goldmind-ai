@@ -10,6 +10,10 @@ export const Route = createFileRoute("/_authenticated/journal")({
     meta: [
       { title: "Trade Journal · GoldMind AI" },
       { name: "description", content: "Every XAUUSD trade with reasoning, confidence, and outcome." },
+      { property: "og:title", content: "Trade Journal · GoldMind AI" },
+      { property: "og:description", content: "Review every XAUUSD paper trade with reasoning, confidence and outcome." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

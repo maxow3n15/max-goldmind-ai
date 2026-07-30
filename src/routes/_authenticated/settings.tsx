@@ -12,6 +12,10 @@ export const Route = createFileRoute("/_authenticated/settings")({
     meta: [
       { title: "Settings · GoldMind AI" },
       { name: "description", content: "Configure risk limits, timeframes, sessions, and trading mode." },
+      { property: "og:title", content: "Settings · GoldMind AI" },
+      { property: "og:description", content: "Configure GoldMind AI risk limits, sessions, execution mode and alerts." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });

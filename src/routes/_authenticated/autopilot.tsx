@@ -15,6 +15,10 @@ export const Route = createFileRoute("/_authenticated/autopilot")({
     meta: [
       { title: "Autopilot · GoldMind AI" },
       { name: "description", content: "Autonomous XAUUSD trading — analysis, safety checks, execution and position management in one control panel." },
+      { property: "og:title", content: "Autopilot · GoldMind AI" },
+      { property: "og:description", content: "Run paper-mode autonomous XAUUSD analysis, safety checks and trade management." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
@@ -30,6 +34,11 @@ function Autopilot() {
 
   const setup = a.analysis?.setup ?? null;
   const conf = a.confluence?.score ?? a.analysis?.confidence ?? 0;
+  const confluenceBreakdown = Array.isArray(a.confluence?.breakdown) ? a.confluence.breakdown : [];
+  const safetyChecks = Array.isArray(a.safety?.checks) ? a.safety.checks : [];
+  const eventRows = Array.isArray(a.events) ? a.events : [];
+  const openTrades = Array.isArray(a.openTrades) ? a.openTrades : [];
+  const passingSafetyChecks = safetyChecks.filter((c) => c.passed).length;
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -117,14 +126,14 @@ function Autopilot() {
               style={{ width: `${Math.min(100, conf)}%`, background: conf >= a.constants.MIN_CONFIDENCE ? "var(--gradient-gold)" : "var(--warning)" }} />
           </div>
           <div className="grid grid-cols-2 gap-1 text-[11px] max-h-40 overflow-auto pr-1">
-            {a.confluence?.breakdown.map((b) => (
+            {confluenceBreakdown.length > 0 ? confluenceBreakdown.map((b) => (
               <div key={b.key} className="flex items-center gap-1.5 truncate">
                 {b.passed
                   ? <CheckCircle2 className="h-3 w-3 shrink-0 text-[color:var(--success)]" />
                   : <XCircle className="h-3 w-3 shrink-0 text-muted-foreground/60" />}
                 <span className={cn("truncate", !b.passed && "text-muted-foreground/70")}>{b.label}</span>
               </div>
-            )) ?? <span className="text-muted-foreground text-xs col-span-2">Waiting for analysis…</span>}
+            )) : <span className="text-muted-foreground text-xs col-span-2">Waiting for analysis…</span>}
           </div>
         </div>
 
@@ -182,18 +191,18 @@ function Autopilot() {
               : <ShieldAlert className="h-4 w-4 text-[color:var(--warning)]" />}
             <h2 className="font-display text-lg font-semibold">Safety engine</h2>
             <span className="ml-auto text-xs text-muted-foreground">
-              {a.safety?.checks.filter((c) => c.passed).length ?? 0} / {a.safety?.checks.length ?? 0} passing
+              {passingSafetyChecks} / {safetyChecks.length} passing
             </span>
           </div>
           <div className="space-y-1.5 max-h-[420px] overflow-auto pr-1">
-            {a.safety?.checks.map((c) => (
+            {safetyChecks.length > 0 ? safetyChecks.map((c) => (
               <div key={c.key} className="flex items-center gap-2 text-xs py-1.5 border-b border-border/30 last:border-0">
                 {c.passed ? <CheckCircle2 className="h-3.5 w-3.5 text-[color:var(--success)] shrink-0" />
                   : <XCircle className="h-3.5 w-3.5 text-[color:var(--destructive)] shrink-0" />}
                 <span className={cn("flex-1", !c.passed && "text-muted-foreground")}>{c.label}</span>
                 {c.detail && <span className="font-mono text-[10px] text-muted-foreground truncate max-w-[50%]" title={c.detail}>{c.detail}</span>}
               </div>
-            )) ?? <span className="text-xs text-muted-foreground">Waiting for first cycle…</span>}
+            )) : <span className="text-xs text-muted-foreground">Waiting for first cycle…</span>}
           </div>
         </div>
 
@@ -201,11 +210,11 @@ function Autopilot() {
         <div className="glass-panel rounded-2xl p-5 flex flex-col">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-display text-lg font-semibold">Live event log</h2>
-            <span className="text-xs text-muted-foreground">last {a.events.length}</span>
+            <span className="text-xs text-muted-foreground">last {eventRows.length}</span>
           </div>
           <div className="space-y-1.5 max-h-[420px] overflow-auto pr-1 font-mono text-[11px]">
-            {a.events.length === 0 && <span className="text-muted-foreground">No events yet.</span>}
-            {a.events.map((e) => (
+            {eventRows.length === 0 && <span className="text-muted-foreground">No events yet.</span>}
+            {eventRows.map((e) => (
               <div key={e.id} className="flex items-start gap-2 py-1 border-b border-border/30 last:border-0">
                 <span className="text-muted-foreground shrink-0">{new Date(e.ts).toISOString().slice(11, 19)}</span>
                 <ChevronRight className={cn("h-3 w-3 mt-0.5 shrink-0",
@@ -226,7 +235,7 @@ function Autopilot() {
       {/* Metrics strip */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <Metric label="Mode" value={a.executor.mode.toUpperCase()} hint={a.executor.connected ? "connected" : "offline"} />
-        <Metric label="Open positions" value={String(a.openTrades.length)} />
+        <Metric label="Open positions" value={String(openTrades.length)} />
         <Metric label="Trades today" value={String(a.todayTradeCount)} />
         <Metric label="Loss streak" value={String(a.consecutiveLosses)} tone={a.consecutiveLosses >= 2 ? "danger" : undefined} />
         <Metric label="Daily P&L" value={fmtUsd(a.snapshot?.daily_pnl ?? 0)}

@@ -12,6 +12,10 @@ export const Route = createFileRoute("/_authenticated/assistant")({
     meta: [
       { title: "AI Assistant · GoldMind AI" },
       { name: "description", content: "Chat with GoldMind's trading assistant about setups, structure, and reasoning." },
+      { property: "og:title", content: "AI Assistant · GoldMind AI" },
+      { property: "og:description", content: "Ask GoldMind AI about XAUUSD setups, market structure, liquidity and risk." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 });
