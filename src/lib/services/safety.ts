@@ -31,6 +31,7 @@ export function runSafety(i: SafetyInput): SafetyReport {
 
   const setup = i.analysis?.setup ?? null;
   const s = i.settings ?? {};
+  const openTrades = Array.isArray(i.openTrades) ? i.openTrades : [];
 
   push("kill_switch", "Kill switch inactive", !i.killSwitch.active, i.killSwitch.reason ?? undefined);
   push("auto_execute", "Auto-execute enabled in settings", !!i.autoExecuteEnabled);
@@ -49,7 +50,7 @@ export function runSafety(i: SafetyInput): SafetyReport {
   push("spread", `Spread ≤ ${MAX_SPREAD}`, (i.quote?.spread ?? 999) <= MAX_SPREAD,
     i.quote ? i.quote.spread.toFixed(2) : "no quote");
   push("max_open", `Open trades ≤ ${s.max_open_trades ?? 3}`,
-    i.openTrades.length < (Number(s.max_open_trades ?? 3)));
+    openTrades.length < (Number(s.max_open_trades ?? 3)));
   push("max_daily_trades", `Trades today ≤ ${s.max_trades_per_day ?? 5}`,
     i.todayTradeCount < (Number(s.max_trades_per_day ?? 5)));
 

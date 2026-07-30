@@ -60,6 +60,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const [lastPlan, setLastPlan] = useState<TradePlan | null>(null);
   const [analysing, setAnalysing] = useState(false);
 
+  const tradeRows = useMemo(() => (Array.isArray(trades.data) ? trades.data : []), [trades.data]);
+
   const openFn = useServerFn(openPaperTrade);
   const closeFn = useServerFn(closePaperTrade);
   const patchStopFn = useServerFn(updateTradeStop);
@@ -97,22 +99,22 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
 
   // Consecutive losses (from most recent closed trades).
   const consecutiveLosses = useMemo(() => {
-    const closed = (trades.data ?? []).filter((t: any) => t.status === "closed" && t.pnl != null)
+    const closed = tradeRows.filter((t: any) => t.status === "closed" && t.pnl != null)
       .sort((a: any, b: any) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime());
     let n = 0;
     for (const t of closed) {
       if (Number(t.pnl) < 0) n += 1; else break;
     }
     return n;
-  }, [trades.data]);
+  }, [tradeRows]);
 
   const todayTradeCount = useMemo(() => {
     const day = new Date(); day.setUTCHours(0, 0, 0, 0);
-    return (trades.data ?? []).filter((t: any) => new Date(t.opened_at) >= day).length;
-  }, [trades.data]);
+    return tradeRows.filter((t: any) => new Date(t.opened_at) >= day).length;
+  }, [tradeRows]);
 
   const openTrades: OpenTrade[] = useMemo(() =>
-    (trades.data ?? []).filter((t: any) => t.status === "open").map((t: any) => ({
+    tradeRows.filter((t: any) => t.status === "open").map((t: any) => ({
       id: t.id,
       direction: t.direction,
       entry_price: Number(t.entry_price),
@@ -122,7 +124,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       take_profit_3: t.take_profit_3 != null ? Number(t.take_profit_3) : null,
       lot_size: Number(t.lot_size),
       opened_at: t.opened_at,
-    })), [trades.data]);
+    })), [tradeRows]);
 
   // --- Auto kill-switch triggers on data changes ---
   useEffect(() => {
