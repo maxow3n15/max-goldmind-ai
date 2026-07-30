@@ -21,7 +21,7 @@ import { getUserSettings } from "@/lib/settings.functions";
 import { computeConfluence } from "@/lib/services/confidence";
 import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
-import { computeLotSize, createPaperExecutionEngine } from "@/lib/services/execution";
+import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
   ConfluenceReport,
