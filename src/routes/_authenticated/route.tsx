@@ -6,6 +6,7 @@ import { PlatformProviders } from "@/providers/PlatformProviders";
 import { GlobalStatusBar } from "@/components/GlobalStatusBar";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { setDiagnostics } from "@/lib/platform-context";
+import { PlatformLoading } from "@/components/PlatformLoading";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/_authenticated")({
     setDiagnostics({ userId: data.user.id, userEmail: data.user.email ?? null });
     return { user: data.user };
   },
+  pendingComponent: () => <PlatformLoading stage="Checking Authentication…" />,
   component: AuthenticatedLayout,
 });
 

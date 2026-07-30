@@ -153,3 +153,8 @@
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }
 }
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar { display: none; }
+}
