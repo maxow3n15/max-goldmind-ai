@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { TradingViewChart } from "@/components/TradingViewChart";
 import { StatCard } from "@/components/StatCard";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
+import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
 import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
@@ -143,12 +144,16 @@ function Dashboard() {
         <StatCard label="Win rate" value={fmtPct(snapshot.data?.win_rate ?? 0)} hint={`${snapshot.data?.closed_count ?? 0} closed · ${snapshot.data?.open_count ?? 0} open`} />
       </div>
 
-      <MarketStatusCard
-        quote={market.quote}
-        status={market.status}
-        lastUpdated={market.lastUpdated}
-        lastError={market.lastError}
-      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <MarketStatusCard
+          quote={market.quote}
+          status={market.status}
+          lastUpdated={market.lastUpdated}
+          lastError={market.lastError}
+        />
+        <AIStatusPanel />
+      </div>
+
 
       <div className="grid lg:grid-cols-3 gap-4">
         {/* Chart */}

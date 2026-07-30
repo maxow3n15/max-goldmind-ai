@@ -13,6 +13,7 @@ import { Toaster } from "sonner";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
+import { getDiagnostics } from "@/lib/platform-context";
 
 function NotFoundComponent() {
   return (
@@ -39,32 +40,60 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const diag = getDiagnostics();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    reportLovableError(error, { boundary: "tanstack_root_error_component", ...diag });
+    console.error("[GoldMind diagnostics]", diag);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
+
+  const rows: Array<[string, string]> = [
+    ["Route", diag.route ?? "—"],
+    ["User", diag.userEmail ?? diag.userId ?? "anonymous"],
+    ["Symbol", diag.symbol],
+    ["Timeframe", diag.timeframe],
+    ["Market", diag.marketStatus],
+    ["Broker", diag.brokerStatus],
+    ["AI engine", diag.aiStatus],
+    ["Current trade", diag.currentTrade ?? "none"],
+  ];
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center glass-panel rounded-2xl p-8">
-        <h1 className="text-xl font-semibold tracking-tight">Something went wrong</h1>
+      <div className="w-full max-w-lg glass-panel rounded-2xl p-8">
+        <h1 className="text-xl font-semibold tracking-tight">Trading terminal error</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Please retry or head back to the dashboard.
+          The interface hit an unexpected problem. Your data and any open positions are unaffected.
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
+        <p className="mt-3 rounded-md border border-border/60 bg-background/50 p-2.5 font-mono text-[11px] text-muted-foreground break-words">
+          {error?.message ?? "Unknown error"}
+        </p>
+
+        <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+          {rows.map(([k, v]) => (
+            <div key={k} className="flex justify-between gap-2 border-b border-border/40 py-1">
+              <dt className="text-muted-foreground">{k}</dt>
+              <dd className="truncate font-mono">{v}</dd>
+            </div>
+          ))}
+        </dl>
+
+        <div className="mt-6 flex flex-wrap gap-2">
           <button
             onClick={() => { router.invalidate(); reset(); }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
           >
-            Try again
+            Retry
           </button>
-          <a href="/" className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent">
-            Go home
+          <a href="/dashboard" className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent">
+            Back to dashboard
           </a>
         </div>
       </div>
     </div>
   );
 }
+
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
