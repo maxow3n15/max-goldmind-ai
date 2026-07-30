@@ -67,6 +67,39 @@ export function createMt5ExecutionEngineStub(): ExecutionEngine {
   };
 }
 
+// Hard cap on risk for any single autopilot leg (percent of balance).
+export const MAX_RISK_PER_LEG_PCT = 0.5;
+
+// Splits one AI setup into up to three independent trades — one per take
+// profit level the AI produced. Each leg carries its own TP as TP1 so the
+// position manager closes it at that target, and each leg risks at most
+// MAX_RISK_PER_LEG_PCT of the balance.
+export function buildLadderPlans(opts: {
+  base: Omit<TradePlan, "lot_size" | "take_profit_1" | "risk_reward">;
+  targets: number[];
+  balance: number;
+  riskPctPerLeg: number;
+}): TradePlan[] {
+  const { base, balance } = opts;
+  const riskPct = Math.min(opts.riskPctPerLeg, MAX_RISK_PER_LEG_PCT);
+  const risk = Math.abs(base.entry - base.stop_loss);
+  const valid = opts.targets
+    .filter((t) => Number.isFinite(t) && t > 0)
+    .filter((t) => (base.direction === "BUY" ? t > base.entry : t < base.entry))
+    .sort((a, b) => (base.direction === "BUY" ? a - b : b - a))
+    .slice(0, 3);
+
+  return valid.map((tp, idx) => ({
+    ...base,
+    take_profit_1: tp,
+    take_profit_2: valid[idx + 1] ?? null,
+    take_profit_3: valid[idx + 2] ?? null,
+    risk_reward: risk > 0 ? +(Math.abs(tp - base.entry) / risk).toFixed(2) : 0,
+    lot_size: computeLotSize({ balance, riskPct, entry: base.entry, stop_loss: base.stop_loss }),
+    reason: `${base.reason} · TP${idx + 1} leg (${riskPct}% risk)`,
+  }));
+}
+
 // Universal position-size calculator. Uses % of balance / stop distance.
 // Assumes XAUUSD contract of 100 oz per 1.0 lot (industry standard).
 export function computeLotSize(opts: {

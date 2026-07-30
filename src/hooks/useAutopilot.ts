@@ -21,7 +21,7 @@ import { getUserSettings } from "@/lib/settings.functions";
 import { computeConfluence } from "@/lib/services/confidence";
 import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
-import { computeLotSize, createPaperExecutionEngine } from "@/lib/services/execution";
+import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
   ConfluenceReport,
@@ -207,18 +207,19 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     if (managedRef.current.has(sigKey)) return;
 
     const balance = Number(snapshot.data?.account?.balance ?? 10000);
-    const riskPct = Number(settings.data?.risk_per_trade ?? 1);
-    const lots = computeLotSize({ balance, riskPct, entry: Number(setup.entry), stop_loss: Number(setup.stop_loss) });
+    // Risk is minimised: at most 0.5% per leg (and never more than the
+    // user's configured risk-per-trade setting).
+    const riskPctPerLeg = Math.min(
+      MAX_RISK_PER_LEG_PCT,
+      Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
+    );
 
-    const plan: TradePlan = {
+    const base = {
       direction: setup.direction,
       entry: Number(setup.entry),
       stop_loss: Number(setup.stop_loss),
-      take_profit_1: Number(setup.take_profit_1),
-      take_profit_2: setup.take_profit_2 != null ? Number(setup.take_profit_2) : null,
-      take_profit_3: setup.take_profit_3 != null ? Number(setup.take_profit_3) : null,
-      lot_size: lots,
-      risk_reward: Number(setup.risk_reward ?? 0),
+      take_profit_2: null,
+      take_profit_3: null,
       confidence: Number(confluence?.score ?? analysis.confidence ?? 0),
       timeframe,
       session: currentSession(),
@@ -226,24 +227,44 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       ai_analysis: analysis,
     };
 
+    const plans = buildLadderPlans({
+      base,
+      targets: [setup.take_profit_1, setup.take_profit_2, setup.take_profit_3]
+        .filter((t: any) => t != null)
+        .map((t: any) => Number(t)),
+      balance,
+      riskPctPerLeg,
+    });
+
+    if (plans.length === 0) return;
+
+    // Respect the max-open-trades ceiling: only take as many legs as fit.
+    const room = Math.max(0, Number(settings.data?.max_open_trades ?? 3) - openTrades.length);
+    const toOpen = plans.slice(0, room);
+    if (toOpen.length === 0) return;
+
     inFlightRef.current = true;
     managedRef.current.add(sigKey);
-    setLastPlan(plan);
-    executor.submit(plan)
-      .then((r) => {
-        log("success", `Opened ${plan.direction} @ ${plan.entry.toFixed(2)} · ${plan.lot_size} lots`,
-          `Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)}`);
-        toast.success("Autopilot opened a paper trade");
-        qc.invalidateQueries({ queryKey: ["trades"] });
-        qc.invalidateQueries({ queryKey: ["snapshot"] });
-        return r;
-      })
-      .catch((e) => {
-        log("error", "Order rejected by execution engine", e?.message);
-      })
-      .finally(() => { inFlightRef.current = false; });
+    setLastPlan(toOpen[0]);
+
+    (async () => {
+      for (const [i, plan] of toOpen.entries()) {
+        try {
+          await executor.submit(plan);
+          log("success",
+            `Opened ${plan.direction} leg ${i + 1}/${toOpen.length} @ ${plan.entry.toFixed(2)} · ${plan.lot_size} lots → TP ${plan.take_profit_1.toFixed(2)}`,
+            `Risk ${riskPctPerLeg}% · Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)}`);
+        } catch (e: any) {
+          log("error", `Leg ${i + 1} rejected by execution engine`, e?.message);
+        }
+      }
+      toast.success(`Autopilot opened ${toOpen.length} paper trade${toOpen.length > 1 ? "s" : ""}`);
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["snapshot"] });
+      inFlightRef.current = false;
+    })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
-      settings.data, confluence, timeframe, executor, log, qc]);
+      settings.data, confluence, timeframe, executor, log, qc, openTrades]);
 
   // Track rejection reasons for the UI (only when a setup exists and we
   // would have wanted to trade but couldn't).
