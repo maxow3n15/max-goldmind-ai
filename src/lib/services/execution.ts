@@ -9,12 +9,14 @@ import type { ExecutionEngine, TradePlan } from "./types";
 import { openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { updateTradeStop } from "@/lib/autopilot.functions";
 
-type ServerCaller = (fn: any) => (...args: any[]) => any;
+type BoundFn = (...args: any[]) => any;
 
-export function createPaperExecutionEngine(useSFn: ServerCaller): ExecutionEngine {
-  const open = useSFn(openPaperTrade);
-  const close = useSFn(closePaperTrade);
-  const patchStop = useSFn(updateTradeStop);
+export function createPaperExecutionEngine(fns: {
+  open: BoundFn;
+  close: BoundFn;
+  patchStop: BoundFn;
+}): ExecutionEngine {
+  const { open, close, patchStop } = fns;
   return {
     mode: "paper",
     connected: true,

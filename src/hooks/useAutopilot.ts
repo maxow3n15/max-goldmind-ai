@@ -16,11 +16,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
-import { getAccountSnapshot, listTrades } from "@/lib/trades.functions";
+import { getAccountSnapshot, listTrades, openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { getUserSettings } from "@/lib/settings.functions";
 import { computeConfluence } from "@/lib/services/confidence";
 import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
+import { updateTradeStop } from "@/lib/autopilot.functions";
 import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
@@ -59,7 +60,13 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const [lastPlan, setLastPlan] = useState<TradePlan | null>(null);
   const [analysing, setAnalysing] = useState(false);
 
-  const executor = useMemo(() => createPaperExecutionEngine(useServerFn), []);
+  const openFn = useServerFn(openPaperTrade);
+  const closeFn = useServerFn(closePaperTrade);
+  const patchStopFn = useServerFn(updateTradeStop);
+  const executor = useMemo(
+    () => createPaperExecutionEngine({ open: openFn, close: closeFn, patchStop: patchStopFn }),
+    [openFn, closeFn, patchStopFn],
+  );
   const inFlightRef = useRef(false);
   const lastAnalyseRef = useRef(0);
   const lastAnalysedPriceRef = useRef<number | null>(null);
