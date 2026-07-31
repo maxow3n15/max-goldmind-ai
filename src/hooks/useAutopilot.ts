@@ -310,7 +310,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       timeframe,
       session: currentSession(),
       reason: analysis.explanation ?? "Autopilot",
-      ai_analysis: { ...analysis, macro, composite },
+      ai_analysis: { ...analysis, macro, composite, quant, session_stats: sessionReport, management },
     };
 
     const plans = buildLadderPlans({
@@ -357,7 +357,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       inFlightRef.current = false;
     })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
-      settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro]);
+      settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro,
+      quant, sessionReport, management]);
 
   // Track rejection reasons for the UI (only when a setup exists and we
   // would have wanted to trade but couldn't).
@@ -372,7 +373,11 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     if (!market.quote?.mid || openTrades.length === 0) return;
     const price = market.quote.mid;
     for (const t of openTrades) {
-      const action = evaluatePosition({ trade: t, price });
+      const action = evaluatePosition({
+        trade: t, price,
+        atr: quant?.volatility?.atr ?? null,
+        plan: management,
+      });
       if (action.type === "none") continue;
       const dedupeKey = `${t.id}:${action.type}:${"new_stop" in action ? action.new_stop : "close"}`;
       if (managedRef.current.has(dedupeKey)) continue;
