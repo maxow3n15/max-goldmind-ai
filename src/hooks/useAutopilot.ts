@@ -23,13 +23,18 @@ import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
 import { updateTradeStop } from "@/lib/autopilot.functions";
 import { getMacroIntel } from "@/lib/macro.functions";
+import { getQuantIntel } from "@/lib/quant.functions";
 import { computeComposite, sizeMultiplier } from "@/lib/services/scoring";
+import { analyseSessions } from "@/lib/services/session-stats";
+import { buildManagementPlan } from "@/lib/services/trade-management";
 import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report";
 import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
+import type { QuantIntel } from "@/lib/services/quant.types";
 import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
   ConfluenceReport,
+  Direction,
   KillSwitchState,
   SafetyReport,
   TradePlan,
