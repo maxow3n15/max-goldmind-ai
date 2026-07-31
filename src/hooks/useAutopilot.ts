@@ -23,13 +23,18 @@ import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
 import { updateTradeStop } from "@/lib/autopilot.functions";
 import { getMacroIntel } from "@/lib/macro.functions";
+import { getQuantIntel } from "@/lib/quant.functions";
 import { computeComposite, sizeMultiplier } from "@/lib/services/scoring";
+import { analyseSessions } from "@/lib/services/session-stats";
+import { buildManagementPlan } from "@/lib/services/trade-management";
 import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report";
 import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
+import type { QuantIntel } from "@/lib/services/quant.types";
 import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
   ConfluenceReport,
+  Direction,
   KillSwitchState,
   SafetyReport,
   TradePlan,
@@ -76,6 +81,31 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const [lastReport, setLastReport] = useState<string | null>(null);
 
   const tradeRows = useMemo(() => (Array.isArray(trades.data) ? trades.data : []), [trades.data]);
+
+  // --- Quantitative intelligence: volume, volatility, momentum, candles, correlation ---
+  // Scored directionally against the current setup and cached server-side, so
+  // the extra analysis costs one small request per cycle.
+  const setupDirection: Direction | null = (analysis?.setup?.direction as Direction) ?? null;
+  const quantFn = useServerFn(getQuantIntel);
+  const quantQuery = useQuery({
+    queryKey: ["quant-intel", timeframe, setupDirection],
+    queryFn: () => quantFn({ data: { timeframe, direction: setupDirection } }) as Promise<QuantIntel>,
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+    placeholderData: (prev) => prev,
+  });
+  const quant = (quantQuery.data ?? null) as QuantIntel | null;
+
+  // Session intelligence is pure statistics over the trader's own history.
+  const sessionReport = useMemo(
+    () => analyseSessions(Array.isArray(trades.data) ? (trades.data as any[]) : [], currentSession()),
+    [trades.data],
+  );
+
+  const management = useMemo(
+    () => buildManagementPlan({ volatility: quant?.volatility, momentum: quant?.momentum }),
+    [quant?.volatility, quant?.momentum],
+  );
 
   const openFn = useServerFn(openPaperTrade);
   const closeFn = useServerFn(closePaperTrade);
@@ -215,10 +245,16 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     return Math.max(0, Math.round(score));
   }, [settings.data, snapshot.data, openTrades.length, consecutiveLosses, market.quote?.spread, market.status]);
 
-  // --- Composite confidence: technical + news + sentiment + risk ---
+  // --- Composite confidence: technical + news + sentiment + risk +
+  // volume + volatility + momentum + session + correlation ---
   useEffect(() => {
-    setComposite(computeComposite({ confluence, analysis, macro, riskScore }));
-  }, [confluence, analysis, macro, riskScore]);
+    setComposite(computeComposite({
+      confluence, analysis, macro, riskScore,
+      volume: quant?.volume, volatility: quant?.volatility, momentum: quant?.momentum,
+      candleQuality: quant?.candles, correlation: quant?.correlation,
+      session: sessionReport,
+    }));
+  }, [confluence, analysis, macro, riskScore, quant, sessionReport]);
 
   // --- Safety recompute whenever any input changes ---
   useEffect(() => {
@@ -256,7 +292,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     const balance = Number(snapshot.data?.account?.balance ?? 10000);
     // Risk is minimised: at most 0.5% per leg (and never more than the
     // user's configured risk-per-trade setting).
-    const mult = composite ? sizeMultiplier(macro, composite) : 1;
+    const mult = composite
+      ? sizeMultiplier(macro, composite, { volume: quant?.volume, volatility: quant?.volatility })
+      : 1;
     const riskPctPerLeg = Number((Math.min(
       MAX_RISK_PER_LEG_PCT,
       Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
@@ -272,7 +310,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       timeframe,
       session: currentSession(),
       reason: analysis.explanation ?? "Autopilot",
-      ai_analysis: { ...analysis, macro, composite },
+      ai_analysis: { ...analysis, macro, composite, quant, session_stats: sessionReport, management },
     };
 
     const plans = buildLadderPlans({
@@ -319,7 +357,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       inFlightRef.current = false;
     })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
-      settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro]);
+      settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro,
+      quant, sessionReport, management]);
 
   // Track rejection reasons for the UI (only when a setup exists and we
   // would have wanted to trade but couldn't).
@@ -334,7 +373,11 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     if (!market.quote?.mid || openTrades.length === 0) return;
     const price = market.quote.mid;
     for (const t of openTrades) {
-      const action = evaluatePosition({ trade: t, price });
+      const action = evaluatePosition({
+        trade: t, price,
+        atr: quant?.volatility?.atr ?? null,
+        plan: management,
+      });
       if (action.type === "none") continue;
       const dedupeKey = `${t.id}:${action.type}:${"new_stop" in action ? action.new_stop : "close"}`;
       if (managedRef.current.has(dedupeKey)) continue;
@@ -357,7 +400,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
           .catch((e) => log("error", "Stop update failed", e?.message));
       }
     }
-  }, [market.quote?.mid, openTrades, executor, log, qc]);
+  }, [market.quote?.mid, openTrades, executor, log, qc, quant?.volatility?.atr, management]);
 
   const start = useCallback(() => {
     if (killSwitch.active) {
@@ -378,6 +421,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     running, killSwitch, events, analysis, confluence, safety,
     macro, macroLoading: macroQuery.isLoading, refreshMacro: () => macroQuery.refetch(),
     composite, lastReport, riskScore,
+    quant, quantLoading: quantQuery.isLoading, sessionReport, management,
     lastRejection, lastPlan, analysing, market, snapshot: snapshot.data,
     settings: settings.data, openTrades, executor,
     consecutiveLosses, todayTradeCount,

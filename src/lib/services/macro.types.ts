@@ -67,15 +67,28 @@ export interface MacroReport {
   degraded?: boolean;              // true when the feed/model failed
 }
 
-/** Four independent pillars plus the blended final confidence. */
+/** Independent pillars plus the blended final confidence. */
 export interface CompositeConfidence {
   technical: number;
   news: number;
   sentiment: number;
   risk: number;
+  volume: number;
+  volatility: number;
+  momentum: number;
+  session: number;
+  correlation: number;
   final: number;
   aligned: boolean;                // news direction agrees with the setup
   gates: { key: string; label: string; passed: boolean; detail?: string }[];
+  contributions: {
+    key: string;
+    label: string;
+    score: number;
+    weight: number;
+    contribution: number;
+    notes: string[];
+  }[];
   passed: boolean;
   blockers: string[];
 }

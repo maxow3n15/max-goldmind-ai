@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAutopilot } from "@/hooks/useAutopilot";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
+import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
@@ -192,6 +193,59 @@ function Autopilot() {
         </div>
       </div>
 
+      {/* Probability breakdown + quantitative modules */}
+      <div className="grid lg:grid-cols-2 gap-4">
+        <ConfidenceBreakdownPanel composite={a.composite} management={a.management} threshold={a.constants.MIN_CONFIDENCE} />
+
+        <div className="glass-panel rounded-2xl p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold">Quantitative modules</h2>
+            {a.quantLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-[11px]">
+            <Module title="Volume & participation" score={a.quant?.volume.score}
+              lines={[
+                `Relative volume ${a.quant?.volume.relative_volume ?? "—"}x · ${a.quant?.volume.participation ?? "—"}`,
+                a.quant?.volume.exhaustion ? "Exhaustion detected" : a.quant?.volume.spike ? "Volume spike" : "No spike",
+                a.quant?.volume.pullback_volume_declining ? "Pullback volume declining" : "Pullback volume elevated",
+              ]} />
+            <Module title="Volatility" score={a.quant?.volatility.score}
+              lines={[
+                `ATR ${a.quant?.volatility.atr ?? "—"} (${a.quant?.volatility.atr_pct ?? "—"}% of price)`,
+                `Regime: ${a.quant?.volatility.regime ?? "—"} · pct ${a.quant?.volatility.percentile ?? "—"}`,
+                `ADR ${a.quant?.volatility.adr ?? "—"} · used ${a.quant?.volatility.adr_used_pct ?? "—"}%`,
+                a.quant?.volatility.extended_move ? "Extended move — waiting for pullback" : "Not over-extended",
+              ]} />
+            <Module title="Momentum" score={a.quant?.momentum.score}
+              lines={[
+                `RSI ${a.quant?.momentum.rsi ?? "—"} · StochRSI ${a.quant?.momentum.stoch_rsi ?? "—"}`,
+                `MACD ${a.quant?.momentum.macd_histogram ?? "—"} · ADX ${a.quant?.momentum.adx ?? "—"}`,
+                `CCI ${a.quant?.momentum.cci ?? "—"} · ROC ${a.quant?.momentum.roc ?? "—"}%`,
+                `Trend strength ${a.quant?.momentum.trend_strength ?? 0}/100`,
+              ]} />
+            <Module title="Candle quality" score={a.quant?.candles.score}
+              lines={[
+                `Quality: ${a.quant?.candles.quality ?? "—"}`,
+                `Body ${a.quant?.candles.body_pct ?? "—"}% · wicks ${a.quant?.candles.upper_wick_pct ?? "—"}/${a.quant?.candles.lower_wick_pct ?? "—"}%`,
+                a.quant?.candles.patterns.length ? a.quant.candles.patterns.join(", ") : "No decisive pattern",
+              ]} />
+            <Module title="Correlation" score={a.quant?.correlation.score}
+              lines={[
+                `${a.quant?.correlation.supporting ?? 0} supporting · ${a.quant?.correlation.conflicting ?? 0} conflicting`,
+                ...(a.quant?.correlation.legs ?? []).slice(0, 4).map(
+                  (l) => `${l.label}: ${l.change_pct == null ? "—" : `${l.change_pct > 0 ? "+" : ""}${l.change_pct}%`}`),
+              ]} />
+            <Module title="Trading session" score={a.sessionReport?.score}
+              lines={[
+                `${a.sessionReport?.current ?? "—"}${a.sessionReport?.favoured ? " · favoured" : ""}`,
+                a.sessionReport?.current_stat
+                  ? `${a.sessionReport.current_stat.win_rate}% win · R:R ${a.sessionReport.current_stat.avg_rr} · ${a.sessionReport.current_stat.avg_duration_minutes}m avg hold`
+                  : "No closed-trade history in this session yet",
+              ]} />
+          </div>
+        </div>
+      </div>
+
       {/* Safety + events */}
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="glass-panel rounded-2xl p-5">
@@ -267,6 +321,26 @@ function Autopilot() {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+function Module({ title, score, lines }: { title: string; score?: number; lines: (string | undefined)[] }) {
+  const s = typeof score === "number" ? score : null;
+  const colour = s == null ? "var(--muted-foreground)"
+    : s >= 70 ? "var(--success)" : s >= 50 ? "var(--gold)" : s >= 40 ? "var(--warning)" : "var(--destructive)";
+  return (
+    <div className="rounded-xl bg-secondary/40 p-2.5 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium truncate">{title}</span>
+        <span className="font-mono tabular-nums" style={{ color: colour }}>{s ?? "—"}</span>
+      </div>
+      <div className="h-1 rounded-full bg-background/60 overflow-hidden">
+        <div className="h-full" style={{ width: `${Math.max(2, Math.min(100, s ?? 0))}%`, background: colour }} />
+      </div>
+      <ul className="text-[10px] text-muted-foreground space-y-0.5">
+        {lines.filter(Boolean).map((l, i) => <li key={i} className="truncate" title={l}>{l}</li>)}
+      </ul>
     </div>
   );
 }
