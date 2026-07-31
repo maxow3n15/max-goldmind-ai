@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useAutopilot } from "@/hooks/useAutopilot";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
+import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
