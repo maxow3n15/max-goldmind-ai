@@ -421,6 +421,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     running, killSwitch, events, analysis, confluence, safety,
     macro, macroLoading: macroQuery.isLoading, refreshMacro: () => macroQuery.refetch(),
     composite, lastReport, riskScore,
+    quant, quantLoading: quantQuery.isLoading, sessionReport, management,
     lastRejection, lastPlan, analysing, market, snapshot: snapshot.data,
     settings: settings.data, openTrades, executor,
     consecutiveLosses, todayTradeCount,
