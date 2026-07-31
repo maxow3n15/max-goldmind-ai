@@ -400,7 +400,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
           .catch((e) => log("error", "Stop update failed", e?.message));
       }
     }
-  }, [market.quote?.mid, openTrades, executor, log, qc]);
+  }, [market.quote?.mid, openTrades, executor, log, qc, quant?.volatility?.atr, management]);
 
   const start = useCallback(() => {
     if (killSwitch.active) {
