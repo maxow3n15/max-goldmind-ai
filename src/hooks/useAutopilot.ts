@@ -292,7 +292,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     const balance = Number(snapshot.data?.account?.balance ?? 10000);
     // Risk is minimised: at most 0.5% per leg (and never more than the
     // user's configured risk-per-trade setting).
-    const mult = composite ? sizeMultiplier(macro, composite) : 1;
+    const mult = composite
+      ? sizeMultiplier(macro, composite, { volume: quant?.volume, volatility: quant?.volatility })
+      : 1;
     const riskPctPerLeg = Number((Math.min(
       MAX_RISK_PER_LEG_PCT,
       Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
