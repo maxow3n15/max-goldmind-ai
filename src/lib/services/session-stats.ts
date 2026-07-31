@@ -69,8 +69,9 @@ export function analyseSessions(trades: TradeRow[], currentSession: string): Ses
 
   // Baseline structural edge: the London and NY overlap carries the most
   // institutional flow in gold.
-  if (currentSession === "London/NY Overlap") { score += 12; notes.push("Overlap session — peak gold liquidity"); }
-  else if (currentSession === "London" || currentSession === "New York") { score += 6; notes.push("Major session — good liquidity"); }
+  if (currentSession === "London/NY Overlap" || currentSession === "New York") { score += 12; notes.push("London/New York overlap window — peak gold liquidity"); }
+  else if (currentSession === "London") { score += 8; notes.push("London session — strong liquidity"); }
+  else if (currentSession === "NY Afternoon") { score += 2; notes.push("New York afternoon — liquidity tapering off"); }
   else if (currentSession === "Asian") { score -= 6; notes.push("Asian session — thinner liquidity, ranges dominate"); }
 
   if (currentStat && currentStat.trades >= 3) {
