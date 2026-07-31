@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAutopilot } from "@/hooks/useAutopilot";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
+import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
@@ -100,6 +101,14 @@ function Autopilot() {
           </div>
         </div>
       </div>
+
+      {/* Macro & news intelligence */}
+      <MacroSentimentPanel
+        macro={a.macro}
+        composite={a.composite}
+        loading={a.macroLoading}
+        onRefresh={a.refreshMacro}
+      />
 
       {/* Top row */}
       <div className="grid lg:grid-cols-3 gap-4">

@@ -22,6 +22,10 @@ import { computeConfluence } from "@/lib/services/confidence";
 import { runSafety, SAFETY_CONSTANTS } from "@/lib/services/safety";
 import { evaluate as evaluatePosition, type OpenTrade } from "@/lib/services/position-manager";
 import { updateTradeStop } from "@/lib/autopilot.functions";
+import { getMacroIntel } from "@/lib/macro.functions";
+import { computeComposite, sizeMultiplier } from "@/lib/services/scoring";
+import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report";
+import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
 import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import type {
   AutopilotEvent,
@@ -46,6 +50,15 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const snapFn = useServerFn(getAccountSnapshot);
   const tradesFn = useServerFn(listTrades);
 
+  const macroFn = useServerFn(getMacroIntel);
+  const macroQuery = useQuery({
+    queryKey: ["macro-intel"],
+    queryFn: () => macroFn() as Promise<MacroReport>,
+    refetchInterval: 5 * 60_000,
+    staleTime: 4 * 60_000,
+  });
+  const macro = (macroQuery.data ?? null) as MacroReport | null;
+
   const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn() });
   const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
   const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
@@ -59,6 +72,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const [lastRejection, setLastRejection] = useState<string | null>(null);
   const [lastPlan, setLastPlan] = useState<TradePlan | null>(null);
   const [analysing, setAnalysing] = useState(false);
+  const [composite, setComposite] = useState<CompositeConfidence | null>(null);
+  const [lastReport, setLastReport] = useState<string | null>(null);
 
   const tradeRows = useMemo(() => (Array.isArray(trades.data) ? trades.data : []), [trades.data]);
 
@@ -184,6 +199,27 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     return () => window.clearInterval(t);
   }, [running, analysisIntervalMs, runAnalysisNow, market.quote?.mid]);
 
+  // --- Risk-condition score (0..100) feeding the composite engine ---
+  const riskScore = useMemo(() => {
+    const s: any = settings.data ?? {};
+    const bal = Number(snapshot.data?.account?.balance ?? 1) || 1;
+    const dailyLossPct = -Math.min(0, Number(snapshot.data?.daily_pnl ?? 0)) / bal * 100;
+    const maxDaily = Number(s.max_daily_loss ?? 3) || 3;
+    const maxOpen = Number(s.max_open_trades ?? 3) || 3;
+    let score = 100;
+    score -= Math.min(40, (dailyLossPct / maxDaily) * 40);
+    score -= Math.min(20, (openTrades.length / maxOpen) * 20);
+    score -= consecutiveLosses * 10;
+    if ((market.quote?.spread ?? 0) > 0.4) score -= 10;
+    if (market.status !== "connected") score -= 30;
+    return Math.max(0, Math.round(score));
+  }, [settings.data, snapshot.data, openTrades.length, consecutiveLosses, market.quote?.spread, market.status]);
+
+  // --- Composite confidence: technical + news + sentiment + risk ---
+  useEffect(() => {
+    setComposite(computeComposite({ confluence, analysis, macro, riskScore }));
+  }, [confluence, analysis, macro, riskScore]);
+
   // --- Safety recompute whenever any input changes ---
   useEffect(() => {
     const report = runSafety({
@@ -199,10 +235,12 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       killSwitch: { active: killSwitch.active, reason: killSwitch.reason },
       autoExecuteEnabled: !!settings.data?.auto_execute,
       execConnected: executor.connected,
+      macro,
+      composite,
     });
     setSafety(report);
   }, [analysis, confluence, market.quote, market.status, settings.data, snapshot.data,
-      openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected]);
+      openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected, macro, composite]);
 
   // --- Submit trade when everything aligns ---
   useEffect(() => {
@@ -218,10 +256,11 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     const balance = Number(snapshot.data?.account?.balance ?? 10000);
     // Risk is minimised: at most 0.5% per leg (and never more than the
     // user's configured risk-per-trade setting).
-    const riskPctPerLeg = Math.min(
+    const mult = composite ? sizeMultiplier(macro, composite) : 1;
+    const riskPctPerLeg = Number((Math.min(
       MAX_RISK_PER_LEG_PCT,
       Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
-    );
+    ) * mult).toFixed(3));
 
     const base = {
       direction: setup.direction,
@@ -229,11 +268,11 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       stop_loss: Number(setup.stop_loss),
       take_profit_2: null,
       take_profit_3: null,
-      confidence: Number(confluence?.score ?? analysis.confidence ?? 0),
+      confidence: Number(composite?.final ?? confluence?.score ?? analysis.confidence ?? 0),
       timeframe,
       session: currentSession(),
       reason: analysis.explanation ?? "Autopilot",
-      ai_analysis: analysis,
+      ai_analysis: { ...analysis, macro, composite },
     };
 
     const plans = buildLadderPlans({
@@ -256,6 +295,13 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     managedRef.current.add(sigKey);
     setLastPlan(toOpen[0]);
 
+    if (composite) {
+      const report = buildTradeReport({ plan: toOpen[0], analysis, confluence, macro, composite });
+      const text = formatTradeReport(report);
+      setLastReport(text);
+      log("info", `Trade report — ${report.direction} @ ${report.entry.toFixed(2)} · ${report.confidence}% confidence`, text);
+    }
+
     (async () => {
       for (const [i, plan] of toOpen.entries()) {
         try {
@@ -273,7 +319,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       inFlightRef.current = false;
     })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
-      settings.data, confluence, timeframe, executor, log, qc, openTrades]);
+      settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro]);
 
   // Track rejection reasons for the UI (only when a setup exists and we
   // would have wanted to trade but couldn't).
@@ -330,6 +376,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
 
   return {
     running, killSwitch, events, analysis, confluence, safety,
+    macro, macroLoading: macroQuery.isLoading, refreshMacro: () => macroQuery.refetch(),
+    composite, lastReport, riskScore,
     lastRejection, lastPlan, analysing, market, snapshot: snapshot.data,
     settings: settings.data, openTrades, executor,
     consecutiveLosses, todayTradeCount,
