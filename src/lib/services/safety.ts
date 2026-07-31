@@ -4,6 +4,7 @@
 
 import type { CheckResult, ConfluenceReport, SafetyReport } from "./types";
 import type { MarketQuote, ConnectionStatus } from "@/lib/market-data.types";
+import type { CompositeConfidence, MacroReport } from "./macro.types";
 
 export interface SafetyInput {
   analysis: any | null;
@@ -18,6 +19,8 @@ export interface SafetyInput {
   killSwitch: { active: boolean; reason: string | null };
   autoExecuteEnabled: boolean;
   execConnected: boolean;
+  macro?: MacroReport | null;
+  composite?: CompositeConfidence | null;
 }
 
 const MIN_CONFIDENCE = 88;
@@ -68,6 +71,21 @@ export function runSafety(i: SafetyInput): SafetyReport {
     s.avoid_news ? "avoid-news enabled" : "disabled");
   push("session_ok", "Trading session allowed",
     !s.preferred_session || !i.analysis?.session_context || i.analysis.session_context.toLowerCase().includes(String(s.preferred_session).toLowerCase()) || i.analysis.session_context.length > 0);
+
+  // --- Fundamental / news intelligence gates ---
+  if (i.composite) {
+    for (const g of i.composite.gates) {
+      push(`composite_${g.key}`, g.label, g.passed, g.detail);
+    }
+  }
+  if (i.macro) {
+    push("macro_feed_live", "Macro news feed live", !i.macro.degraded,
+      i.macro.degraded ? "degraded — execution blocked" : `score ${i.macro.news_score}/100`);
+    push("event_blackout", "No imminent high-impact event", !i.macro.blackout.active,
+      i.macro.blackout.reason ?? undefined);
+  } else {
+    push("macro_feed_live", "Macro news feed live", false, "not loaded");
+  }
 
   const failing = c.filter((x) => !x.passed);
   return {
