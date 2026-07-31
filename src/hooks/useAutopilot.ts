@@ -245,10 +245,16 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     return Math.max(0, Math.round(score));
   }, [settings.data, snapshot.data, openTrades.length, consecutiveLosses, market.quote?.spread, market.status]);
 
-  // --- Composite confidence: technical + news + sentiment + risk ---
+  // --- Composite confidence: technical + news + sentiment + risk +
+  // volume + volatility + momentum + session + correlation ---
   useEffect(() => {
-    setComposite(computeComposite({ confluence, analysis, macro, riskScore }));
-  }, [confluence, analysis, macro, riskScore]);
+    setComposite(computeComposite({
+      confluence, analysis, macro, riskScore,
+      volume: quant?.volume, volatility: quant?.volatility, momentum: quant?.momentum,
+      candleQuality: quant?.candles, correlation: quant?.correlation,
+      session: sessionReport,
+    }));
+  }, [confluence, analysis, macro, riskScore, quant, sessionReport]);
 
   // --- Safety recompute whenever any input changes ---
   useEffect(() => {
