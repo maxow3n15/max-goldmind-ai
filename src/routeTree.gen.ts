@@ -13,6 +13,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/macro'
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedAutopilotRouteImport } from './routes/_authenticated/autopilot'
@@ -37,6 +38,11 @@ const IndexRoute = IndexRouteImport.update({
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedMacroRoute = AuthenticatedMacroRouteImport.update({
+  id: '/macro',
+  path: '/macro',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedJournalRoute = AuthenticatedJournalRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/autopilot': typeof AuthenticatedAutopilotRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/journal': typeof AuthenticatedJournalRoute
+  '/macro': typeof AuthenticatedMacroRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
@@ -89,6 +96,7 @@ export interface FileRoutesByTo {
   '/autopilot': typeof AuthenticatedAutopilotRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/journal': typeof AuthenticatedJournalRoute
+  '/macro': typeof AuthenticatedMacroRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
@@ -102,6 +110,7 @@ export interface FileRoutesById {
   '/_authenticated/autopilot': typeof AuthenticatedAutopilotRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
+  '/_authenticated/macro': typeof AuthenticatedMacroRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
@@ -115,6 +124,7 @@ export interface FileRouteTypes {
     | '/autopilot'
     | '/dashboard'
     | '/journal'
+    | '/macro'
     | '/settings'
     | '/api/public/market/xauusd'
   fileRoutesByTo: FileRoutesByTo
@@ -126,6 +136,7 @@ export interface FileRouteTypes {
     | '/autopilot'
     | '/dashboard'
     | '/journal'
+    | '/macro'
     | '/settings'
     | '/api/public/market/xauusd'
   id:
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/_authenticated/autopilot'
     | '/_authenticated/dashboard'
     | '/_authenticated/journal'
+    | '/_authenticated/macro'
     | '/_authenticated/settings'
     | '/api/public/market/xauusd'
   fileRoutesById: FileRoutesById
@@ -177,6 +189,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/macro': {
+      id: '/_authenticated/macro'
+      path: '/macro'
+      fullPath: '/macro'
+      preLoaderRoute: typeof AuthenticatedMacroRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/journal': {
@@ -230,6 +249,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAutopilotRoute: typeof AuthenticatedAutopilotRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
+  AuthenticatedMacroRoute: typeof AuthenticatedMacroRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
 }
 
@@ -239,6 +259,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAutopilotRoute: AuthenticatedAutopilotRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,
+  AuthenticatedMacroRoute: AuthenticatedMacroRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
 }
 

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useAutopilot } from "@/hooks/useAutopilot";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
+import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
