@@ -82,6 +82,31 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
 
   const tradeRows = useMemo(() => (Array.isArray(trades.data) ? trades.data : []), [trades.data]);
 
+  // --- Quantitative intelligence: volume, volatility, momentum, candles, correlation ---
+  // Scored directionally against the current setup and cached server-side, so
+  // the extra analysis costs one small request per cycle.
+  const setupDirection: Direction | null = (analysis?.setup?.direction as Direction) ?? null;
+  const quantFn = useServerFn(getQuantIntel);
+  const quantQuery = useQuery({
+    queryKey: ["quant-intel", timeframe, setupDirection],
+    queryFn: () => quantFn({ data: { timeframe, direction: setupDirection } }) as Promise<QuantIntel>,
+    refetchInterval: 60_000,
+    staleTime: 45_000,
+    placeholderData: (prev) => prev,
+  });
+  const quant = (quantQuery.data ?? null) as QuantIntel | null;
+
+  // Session intelligence is pure statistics over the trader's own history.
+  const sessionReport = useMemo(
+    () => analyseSessions(Array.isArray(trades.data) ? (trades.data as any[]) : [], currentSession()),
+    [trades.data],
+  );
+
+  const management = useMemo(
+    () => buildManagementPlan({ volatility: quant?.volatility, momentum: quant?.momentum }),
+    [quant?.volatility, quant?.momentum],
+  );
+
   const openFn = useServerFn(openPaperTrade);
   const closeFn = useServerFn(closePaperTrade);
   const patchStopFn = useServerFn(updateTradeStop);
