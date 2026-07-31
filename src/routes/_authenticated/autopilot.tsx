@@ -325,6 +325,26 @@ function Autopilot() {
   );
 }
 
+function Module({ title, score, lines }: { title: string; score?: number; lines: (string | undefined)[] }) {
+  const s = typeof score === "number" ? score : null;
+  const colour = s == null ? "var(--muted-foreground)"
+    : s >= 70 ? "var(--success)" : s >= 50 ? "var(--gold)" : s >= 40 ? "var(--warning)" : "var(--destructive)";
+  return (
+    <div className="rounded-xl bg-secondary/40 p-2.5 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium truncate">{title}</span>
+        <span className="font-mono tabular-nums" style={{ color: colour }}>{s ?? "—"}</span>
+      </div>
+      <div className="h-1 rounded-full bg-background/60 overflow-hidden">
+        <div className="h-full" style={{ width: `${Math.max(2, Math.min(100, s ?? 0))}%`, background: colour }} />
+      </div>
+      <ul className="text-[10px] text-muted-foreground space-y-0.5">
+        {lines.filter(Boolean).map((l, i) => <li key={i} className="truncate" title={l}>{l}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function Kv({ k, v, tone }: { k: string; v: any; tone?: "success" | "danger" }) {
   return (
     <div className="flex items-center justify-between p-1.5 rounded bg-secondary/40">
