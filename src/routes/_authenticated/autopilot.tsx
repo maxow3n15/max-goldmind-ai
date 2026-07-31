@@ -102,6 +102,14 @@ function Autopilot() {
         </div>
       </div>
 
+      {/* Macro & news intelligence */}
+      <MacroSentimentPanel
+        macro={a.macro}
+        composite={a.composite}
+        loading={a.macroLoading}
+        onRefresh={a.refreshMacro}
+      />
+
       {/* Top row */}
       <div className="grid lg:grid-cols-3 gap-4">
         <MarketStatusCard quote={a.market.quote} status={a.market.status}
