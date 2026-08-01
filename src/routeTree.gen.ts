@@ -15,14 +15,17 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedTradingModeRouteImport } from './routes/_authenticated/trading-mode'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedRiskRouteImport } from './routes/_authenticated/risk'
 import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/macro'
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedBrokerConnectionsRouteImport } from './routes/_authenticated/broker-connections'
+import { Route as AuthenticatedBacktestingRouteImport } from './routes/_authenticated/backtesting'
 import { Route as AuthenticatedAutopilotRouteImport } from './routes/_authenticated/autopilot'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as ApiPublicWebhookTokenRouteImport } from './routes/api/public/webhook/$token'
 import { Route as ApiPublicMarketXauusdRouteImport } from './routes/api/public/market/xauusd'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -55,6 +58,11 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRiskRoute = AuthenticatedRiskRouteImport.update({
+  id: '/risk',
+  path: '/risk',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedMacroRoute = AuthenticatedMacroRouteImport.update({
   id: '/macro',
   path: '/macro',
@@ -82,6 +90,12 @@ const AuthenticatedBrokerConnectionsRoute =
     path: '/broker-connections',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedBacktestingRoute =
+  AuthenticatedBacktestingRouteImport.update({
+    id: '/backtesting',
+    path: '/backtesting',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAutopilotRoute = AuthenticatedAutopilotRouteImport.update({
   id: '/autopilot',
   path: '/autopilot',
@@ -97,6 +111,11 @@ const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicWebhookTokenRoute = ApiPublicWebhookTokenRouteImport.update({
+  id: '/api/public/webhook/$token',
+  path: '/api/public/webhook/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMarketXauusdRoute = ApiPublicMarketXauusdRouteImport.update({
   id: '/api/public/market/xauusd',
   path: '/api/public/market/xauusd',
@@ -110,14 +129,17 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/autopilot': typeof AuthenticatedAutopilotRoute
+  '/backtesting': typeof AuthenticatedBacktestingRoute
   '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
+  '/risk': typeof AuthenticatedRiskRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,14 +148,17 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/autopilot': typeof AuthenticatedAutopilotRoute
+  '/backtesting': typeof AuthenticatedBacktestingRoute
   '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
+  '/risk': typeof AuthenticatedRiskRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -144,14 +169,17 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
   '/_authenticated/autopilot': typeof AuthenticatedAutopilotRoute
+  '/_authenticated/backtesting': typeof AuthenticatedBacktestingRoute
   '/_authenticated/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
   '/_authenticated/macro': typeof AuthenticatedMacroRoute
+  '/_authenticated/risk': typeof AuthenticatedRiskRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -162,14 +190,17 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assistant'
     | '/autopilot'
+    | '/backtesting'
     | '/broker-connections'
     | '/dashboard'
     | '/diagnostics'
     | '/journal'
     | '/macro'
+    | '/risk'
     | '/settings'
     | '/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -178,14 +209,17 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assistant'
     | '/autopilot'
+    | '/backtesting'
     | '/broker-connections'
     | '/dashboard'
     | '/diagnostics'
     | '/journal'
     | '/macro'
+    | '/risk'
     | '/settings'
     | '/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   id:
     | '__root__'
     | '/'
@@ -195,14 +229,17 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics'
     | '/_authenticated/assistant'
     | '/_authenticated/autopilot'
+    | '/_authenticated/backtesting'
     | '/_authenticated/broker-connections'
     | '/_authenticated/dashboard'
     | '/_authenticated/diagnostics'
     | '/_authenticated/journal'
     | '/_authenticated/macro'
+    | '/_authenticated/risk'
     | '/_authenticated/settings'
     | '/_authenticated/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -211,6 +248,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicMarketXauusdRoute: typeof ApiPublicMarketXauusdRoute
+  ApiPublicWebhookTokenRoute: typeof ApiPublicWebhookTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -257,6 +295,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/risk': {
+      id: '/_authenticated/risk'
+      path: '/risk'
+      fullPath: '/risk'
+      preLoaderRoute: typeof AuthenticatedRiskRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/macro': {
       id: '/_authenticated/macro'
       path: '/macro'
@@ -292,6 +337,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedBrokerConnectionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/backtesting': {
+      id: '/_authenticated/backtesting'
+      path: '/backtesting'
+      fullPath: '/backtesting'
+      preLoaderRoute: typeof AuthenticatedBacktestingRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/autopilot': {
       id: '/_authenticated/autopilot'
       path: '/autopilot'
@@ -313,6 +365,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/webhook/$token': {
+      id: '/api/public/webhook/$token'
+      path: '/api/public/webhook/$token'
+      fullPath: '/api/public/webhook/$token'
+      preLoaderRoute: typeof ApiPublicWebhookTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/market/xauusd': {
       id: '/api/public/market/xauusd'
       path: '/api/public/market/xauusd'
@@ -327,11 +386,13 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
   AuthenticatedAutopilotRoute: typeof AuthenticatedAutopilotRoute
+  AuthenticatedBacktestingRoute: typeof AuthenticatedBacktestingRoute
   AuthenticatedBrokerConnectionsRoute: typeof AuthenticatedBrokerConnectionsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
   AuthenticatedMacroRoute: typeof AuthenticatedMacroRoute
+  AuthenticatedRiskRoute: typeof AuthenticatedRiskRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTradingModeRoute: typeof AuthenticatedTradingModeRoute
 }
@@ -340,11 +401,13 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
   AuthenticatedAutopilotRoute: AuthenticatedAutopilotRoute,
+  AuthenticatedBacktestingRoute: AuthenticatedBacktestingRoute,
   AuthenticatedBrokerConnectionsRoute: AuthenticatedBrokerConnectionsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,
   AuthenticatedMacroRoute: AuthenticatedMacroRoute,
+  AuthenticatedRiskRoute: AuthenticatedRiskRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTradingModeRoute: AuthenticatedTradingModeRoute,
 }
@@ -358,6 +421,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicMarketXauusdRoute: ApiPublicMarketXauusdRoute,
+  ApiPublicWebhookTokenRoute: ApiPublicWebhookTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

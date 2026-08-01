@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useSyncExternalStore } from "react";
 import { Activity, Cpu, Database, Gauge, Radio, ShieldCheck, AlertTriangle } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
 import { diagnosticsEngine, type DiagnosticsSnapshot } from "@/engines/diagnostics.engine";
 import { loggingEngine } from "@/engines/logging.engine";
 import type { DecisionSnapshot } from "@/engines/kernel/event-bus";
@@ -80,8 +79,7 @@ function DiagnosticsPage() {
   const rejected = decisions.filter((d) => d.outcome === "rejected").length;
 
   return (
-    <AppShell>
-      <div className="p-4 md:p-8 space-y-6 max-w-6xl">
+    <div className="p-4 md:p-8 space-y-6 max-w-6xl">
         <header>
           <h1 className="font-display text-2xl md:text-3xl font-semibold">System <span className="gold-text">Diagnostics</span></h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -185,8 +183,7 @@ function DiagnosticsPage() {
             )}
           </div>
         </section>
-      </div>
-    </AppShell>
+    </div>
   );
 }
 

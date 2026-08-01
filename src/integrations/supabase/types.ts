@@ -50,6 +50,54 @@ export type Database = {
         }
         Relationships: []
       }
+      backtest_runs: {
+        Row: {
+          bars: number
+          config: Json
+          created_at: string
+          ended_at: string | null
+          equity_curve: Json
+          id: string
+          label: string
+          metrics: Json
+          started_at: string | null
+          symbol: string
+          timeframe: string
+          trades: Json
+          user_id: string
+        }
+        Insert: {
+          bars?: number
+          config?: Json
+          created_at?: string
+          ended_at?: string | null
+          equity_curve?: Json
+          id?: string
+          label?: string
+          metrics?: Json
+          started_at?: string | null
+          symbol?: string
+          timeframe: string
+          trades?: Json
+          user_id: string
+        }
+        Update: {
+          bars?: number
+          config?: Json
+          created_at?: string
+          ended_at?: string | null
+          equity_curve?: Json
+          id?: string
+          label?: string
+          metrics?: Json
+          started_at?: string | null
+          symbol?: string
+          timeframe?: string
+          trades?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       broker_connections: {
         Row: {
           account_name: string | null
@@ -336,55 +384,145 @@ export type Database = {
         Row: {
           auto_execute: boolean
           avoid_news: boolean
+          cooldown_minutes: number
           created_at: string
+          execution_mode: string
           live_trading_enabled: boolean
+          max_correlated_trades: number
           max_daily_loss: number
+          max_drawdown_pct: number
           max_open_trades: number
+          max_risk_per_trade_pct: number
+          max_total_exposure_lots: number
           max_trades_per_day: number
           max_weekly_loss: number
           notify_browser: boolean
           notify_email: boolean
           preferred_session: string
           preferred_timeframe: string
+          recovery_mode_enabled: boolean
           risk_per_trade: number
           trading_mode: string
           updated_at: string
           user_id: string
+          webhook_enabled: boolean
+          webhook_token: string | null
         }
         Insert: {
           auto_execute?: boolean
           avoid_news?: boolean
+          cooldown_minutes?: number
           created_at?: string
+          execution_mode?: string
           live_trading_enabled?: boolean
+          max_correlated_trades?: number
           max_daily_loss?: number
+          max_drawdown_pct?: number
           max_open_trades?: number
+          max_risk_per_trade_pct?: number
+          max_total_exposure_lots?: number
           max_trades_per_day?: number
           max_weekly_loss?: number
           notify_browser?: boolean
           notify_email?: boolean
           preferred_session?: string
           preferred_timeframe?: string
+          recovery_mode_enabled?: boolean
           risk_per_trade?: number
           trading_mode?: string
           updated_at?: string
           user_id: string
+          webhook_enabled?: boolean
+          webhook_token?: string | null
         }
         Update: {
           auto_execute?: boolean
           avoid_news?: boolean
+          cooldown_minutes?: number
           created_at?: string
+          execution_mode?: string
           live_trading_enabled?: boolean
+          max_correlated_trades?: number
           max_daily_loss?: number
+          max_drawdown_pct?: number
           max_open_trades?: number
+          max_risk_per_trade_pct?: number
+          max_total_exposure_lots?: number
           max_trades_per_day?: number
           max_weekly_loss?: number
           notify_browser?: boolean
           notify_email?: boolean
           preferred_session?: string
           preferred_timeframe?: string
+          recovery_mode_enabled?: boolean
           risk_per_trade?: number
           trading_mode?: string
           updated_at?: string
+          user_id?: string
+          webhook_enabled?: boolean
+          webhook_token?: string | null
+        }
+        Relationships: []
+      }
+      webhook_signals: {
+        Row: {
+          action: string
+          ai_confidence: number | null
+          ai_reasoning: Json
+          ai_verdict: string | null
+          comment: string | null
+          error: string | null
+          id: string
+          lot_size: number | null
+          price: number | null
+          processed_at: string | null
+          raw: Json
+          received_at: string
+          source: string
+          status: string
+          stop_loss: number | null
+          symbol: string
+          take_profit: number | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          ai_confidence?: number | null
+          ai_reasoning?: Json
+          ai_verdict?: string | null
+          comment?: string | null
+          error?: string | null
+          id?: string
+          lot_size?: number | null
+          price?: number | null
+          processed_at?: string | null
+          raw?: Json
+          received_at?: string
+          source?: string
+          status?: string
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          ai_confidence?: number | null
+          ai_reasoning?: Json
+          ai_verdict?: string | null
+          comment?: string | null
+          error?: string | null
+          id?: string
+          lot_size?: number | null
+          price?: number | null
+          processed_at?: string | null
+          raw?: Json
+          received_at?: string
+          source?: string
+          status?: string
+          stop_loss?: number | null
+          symbol?: string
+          take_profit?: number | null
           user_id?: string
         }
         Relationships: []
