@@ -1,6 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { useAutopilot } from "@/hooks/useAutopilot";
+import { useAutopilotContext } from "@/providers/AutopilotProvider";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
@@ -31,8 +30,8 @@ const TIMEFRAMES = [
 ] as const;
 
 function Autopilot() {
-  const [timeframe, setTimeframe] = useState<string>("15");
-  const a = useAutopilot({ timeframe });
+  const a = useAutopilotContext();
+  const { timeframe, setTimeframe } = a;
 
   const setup = a.analysis?.setup ?? null;
   const conf = a.confluence?.score ?? a.analysis?.confidence ?? 0;
@@ -98,7 +97,7 @@ function Autopilot() {
                 : "Autopilot is paused."}
           </div>
           <div className="text-xs opacity-80 mt-0.5">
-            The engine runs while this page is open. For 24/7 headless operation, deploy the external trading worker.
+            The engine keeps running on every page while this tab is open — use the corner widget to pause it or watch live trades. For 24/7 headless operation, deploy the external trading worker.
           </div>
         </div>
       </div>
