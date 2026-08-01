@@ -8,6 +8,8 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { setDiagnostics } from "@/lib/platform-context";
 import { PlatformLoading } from "@/components/PlatformLoading";
 import { AutopilotWidget } from "@/components/AutopilotWidget";
+import { installSessionPersistence, purgeUnconsentedSession } from "@/lib/session-persistence";
+
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
