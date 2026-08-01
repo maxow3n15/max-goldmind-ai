@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight, Activity } from "lucide-react";
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight, Activity, ShieldCheck, FlaskConical } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -9,6 +9,8 @@ import { setRememberMe } from "@/lib/session-persistence";
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/autopilot", label: "Autopilot", icon: Bot },
+  { to: "/risk", label: "Risk Engine", icon: ShieldCheck },
+  { to: "/backtesting", label: "Backtesting", icon: FlaskConical },
   { to: "/broker-connections", label: "Brokers", icon: Link2 },
   { to: "/trading-mode", label: "Trading Mode", icon: ToggleRight },
   { to: "/macro", label: "Market Intel", icon: Newspaper },
@@ -17,6 +19,7 @@ const NAV = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/diagnostics", label: "Diagnostics", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
+
 
 ] as const;
 
