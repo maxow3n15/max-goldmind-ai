@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Zap } from "lucide-react";
 import { toast } from "sonner";
+import { getRememberMe, installSessionPersistence, setRememberMe } from "@/lib/session-persistence";
+
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
