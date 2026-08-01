@@ -333,6 +333,56 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   }, [analysis, confluence, market.quote, market.status, settings.data, snapshot.data,
       openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected, macro, composite]);
 
+  // --- Audit trail: every evaluated cycle is published exactly once,
+  // whether the trade was taken or rejected. The logging engine batches
+  // these to the database off the hot path.
+  useEffect(() => {
+    const cycle = cycleRef.current;
+    if (!cycle || !safety || !composite || !analysis) return;
+    if (loggedCycleRef.current === cycle.id) return;
+    loggedCycleRef.current = cycle.id;
+
+    const setup = analysis?.setup ?? null;
+    const blockers = [...(composite.blockers ?? []), ...(safety.failingReasons ?? [])];
+    const latencySnapshot = metrics.getSnapshot().latency;
+
+    const decision: DecisionSnapshot = {
+      cycleId: cycle.id,
+      ts: Date.now(),
+      symbol: "XAUUSD",
+      timeframe,
+      outcome: blockers.length === 0 && running ? "accepted" : "rejected",
+      direction: (setup?.direction as "BUY" | "SELL" | undefined) ?? null,
+      confidence: composite.final,
+      technicalScore: composite.technical,
+      newsScore: composite.news,
+      reasoning: [
+        analysis?.explanation,
+        ...(confluence?.supporting ?? []),
+        ...composite.contributions.map((c) => `${c.label}: ${c.score}/100 (weight ${Math.round(c.weight * 100)}%)`),
+      ].filter(Boolean).slice(0, 40) as string[],
+      blockers: blockers.slice(0, 40),
+      price: market.quote?.mid ?? null,
+      spread: market.quote?.spread ?? null,
+      latency: {
+        ai: latencySnapshot.ai.last ?? 0,
+        market: latencySnapshot.market.last ?? 0,
+        confluence: latencySnapshot.confluence.last ?? 0,
+        execution: latencySnapshot.execution.last ?? 0,
+      },
+      payload: {
+        bias: analysis?.bias ?? null,
+        risk_reward: setup?.risk_reward ?? null,
+        entry: setup?.entry ?? null,
+        stop_loss: setup?.stop_loss ?? null,
+        mode: tradingMode,
+        running,
+      },
+    };
+    bus.emit("decision:evaluated", decision);
+  }, [safety, composite, analysis, confluence, timeframe, market.quote, running, tradingMode]);
+
+
   // --- Submit trade when everything aligns ---
   useEffect(() => {
     if (!running || killSwitch.active) return;
