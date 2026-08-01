@@ -34,6 +34,7 @@ function ShellBody() {
       <div className="animate-in fade-in duration-200">
         <Outlet />
       </div>
+      <AutopilotWidget />
     </AppShell>
   );
 }
