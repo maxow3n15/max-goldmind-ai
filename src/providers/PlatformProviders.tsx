@@ -4,6 +4,7 @@ import { NotificationProvider } from "./NotificationProvider";
 import { AIProvider } from "./AIProvider";
 import { BrokerProvider } from "./BrokerProvider";
 import { RiskProvider } from "./RiskProvider";
+import { AutopilotProvider } from "./AutopilotProvider";
 
 /** Single composition point for all global application providers. */
 export function PlatformProviders({ children }: { children: ReactNode }) {
@@ -12,7 +13,9 @@ export function PlatformProviders({ children }: { children: ReactNode }) {
       <MarketDataProvider>
         <BrokerProvider>
           <RiskProvider>
-            <AIProvider>{children}</AIProvider>
+            <AIProvider>
+              <AutopilotProvider>{children}</AutopilotProvider>
+            </AIProvider>
           </RiskProvider>
         </BrokerProvider>
       </MarketDataProvider>
