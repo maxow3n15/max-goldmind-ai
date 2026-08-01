@@ -32,6 +32,9 @@ import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.type
 import type { QuantIntel } from "@/lib/services/quant.types";
 import { buildLadderPlans, createPaperExecutionEngine, createLiveExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import { listBrokerConnections, placeLiveOrder, closeLiveOrder, modifyLiveOrder } from "@/lib/brokers.functions";
+import { bus, type DecisionSnapshot } from "@/engines/kernel/event-bus";
+import { metrics } from "@/engines/kernel/metrics";
+
 
 import type {
   AutopilotEvent,
@@ -151,6 +154,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const lastAnalyseRef = useRef(0);
   const lastAnalysedPriceRef = useRef<number | null>(null);
   const managedRef = useRef<Set<string>>(new Set());
+  const cycleRef = useRef<{ id: string; startedAt: number } | null>(null);
+  const loggedCycleRef = useRef<string | null>(null);
+
 
   const log = useCallback((level: AutopilotEvent["level"], message: string, detail?: string) => {
     setEvents((prev) => {
@@ -230,24 +236,40 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     if (analysing) return;
     if (!market.quote?.mid) return;
     setAnalysing(true);
+    const cycleId = crypto.randomUUID();
+    cycleRef.current = { id: cycleId, startedAt: Date.now() };
+    bus.emit("ai:started", { cycleId, timeframe });
+    const endAi = metrics.start("ai");
     try {
       const res: any = await analyzeFn({ data: { timeframe, session: currentSession(), price: market.quote.mid } });
+      const aiMs = endAi();
       setAnalysis(res);
+      const endConf = metrics.start("confluence");
       const conf = computeConfluence({
         analysis: res,
         htfBias: res?.bias ?? null,
         spread: market.quote?.spread ?? null,
       });
+      endConf();
       setConfluence(conf);
       lastAnalysedPriceRef.current = market.quote.mid;
       lastAnalyseRef.current = Date.now();
-      log("info", `Analysis refreshed — ${res?.bias ?? "?"} · ${conf.score}% confluence`);
+      bus.emit("ai:completed", {
+        cycleId,
+        durationMs: Math.round(aiMs),
+        bias: res?.bias ?? null,
+        confidence: conf.score,
+      });
+      log("info", `Analysis refreshed — ${res?.bias ?? "?"} · ${conf.score}% confluence · ${Math.round(aiMs)}ms`);
     } catch (e: any) {
+      endAi();
+      bus.emit("ai:failed", { cycleId, error: e?.message ?? "analysis failed" });
       log("error", "Analysis failed", e?.message);
     } finally {
       setAnalysing(false);
     }
   }, [analyzeFn, market.quote?.mid, market.quote?.spread, timeframe, analysing, log]);
+
 
   // Cadence: every analysisIntervalMs, or when price drifts > 0.15%.
   useEffect(() => {
@@ -310,6 +332,56 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     setSafety(report);
   }, [analysis, confluence, market.quote, market.status, settings.data, snapshot.data,
       openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected, macro, composite]);
+
+  // --- Audit trail: every evaluated cycle is published exactly once,
+  // whether the trade was taken or rejected. The logging engine batches
+  // these to the database off the hot path.
+  useEffect(() => {
+    const cycle = cycleRef.current;
+    if (!cycle || !safety || !composite || !analysis) return;
+    if (loggedCycleRef.current === cycle.id) return;
+    loggedCycleRef.current = cycle.id;
+
+    const setup = analysis?.setup ?? null;
+    const blockers = [...(composite.blockers ?? []), ...(safety.failingReasons ?? [])];
+    const latencySnapshot = metrics.getSnapshot().latency;
+
+    const decision: DecisionSnapshot = {
+      cycleId: cycle.id,
+      ts: Date.now(),
+      symbol: "XAUUSD",
+      timeframe,
+      outcome: blockers.length === 0 && running ? "accepted" : "rejected",
+      direction: (setup?.direction as "BUY" | "SELL" | undefined) ?? null,
+      confidence: composite.final,
+      technicalScore: composite.technical,
+      newsScore: composite.news,
+      reasoning: [
+        analysis?.explanation,
+        ...(confluence?.supporting ?? []),
+        ...composite.contributions.map((c) => `${c.label}: ${c.score}/100 (weight ${Math.round(c.weight * 100)}%)`),
+      ].filter(Boolean).slice(0, 40) as string[],
+      blockers: blockers.slice(0, 40),
+      price: market.quote?.mid ?? null,
+      spread: market.quote?.spread ?? null,
+      latency: {
+        ai: latencySnapshot.ai.last ?? 0,
+        market: latencySnapshot.market.last ?? 0,
+        confluence: latencySnapshot.confluence.last ?? 0,
+        execution: latencySnapshot.execution.last ?? 0,
+      },
+      payload: {
+        bias: analysis?.bias ?? null,
+        risk_reward: setup?.risk_reward ?? null,
+        entry: setup?.entry ?? null,
+        stop_loss: setup?.stop_loss ?? null,
+        mode: tradingMode,
+        running,
+      },
+    };
+    bus.emit("decision:evaluated", decision);
+  }, [safety, composite, analysis, confluence, timeframe, market.quote, running, tradingMode]);
+
 
   // --- Submit trade when everything aligns ---
   useEffect(() => {
@@ -374,16 +446,26 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     }
 
     (async () => {
+      const cycleId = cycleRef.current?.id ?? "manual";
       for (const [i, plan] of toOpen.entries()) {
+        const endExec = metrics.start("execution");
         try {
           await executor.submit(plan);
+          const ms = endExec();
+          bus.emit("execution:submitted", {
+            cycleId, direction: plan.direction, entry: plan.entry,
+            lots: plan.lot_size, leg: i + 1, legs: toOpen.length,
+          });
           log("success",
             `Opened ${plan.direction} leg ${i + 1}/${toOpen.length} @ ${plan.entry.toFixed(2)} · ${plan.lot_size} lots → TP ${plan.take_profit_1.toFixed(2)}`,
-            `Risk ${riskPctPerLeg}% · Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)}`);
+            `Risk ${riskPctPerLeg}% · Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)} · ${Math.round(ms)}ms`);
         } catch (e: any) {
+          endExec();
+          bus.emit("execution:failed", { cycleId, error: e?.message ?? "execution failed" });
           log("error", `Leg ${i + 1} rejected by execution engine`, e?.message);
         }
       }
+
       toast.success(`Autopilot opened ${toOpen.length} paper trade${toOpen.length > 1 ? "s" : ""}`);
       qc.invalidateQueries({ queryKey: ["trades"] });
       qc.invalidateQueries({ queryKey: ["snapshot"] });

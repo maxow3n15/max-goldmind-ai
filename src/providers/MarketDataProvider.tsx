@@ -1,5 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { PollingMarketDataService } from "@/services/market-data.service";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { marketDataEngine } from "@/engines/market-data.engine";
+import { loggingEngine } from "@/engines/logging.engine";
+import { diagnosticsEngine } from "@/engines/diagnostics.engine";
+import { engines } from "@/engines/kernel/registry";
 import { setDiagnostics } from "@/lib/platform-context";
 import type { MarketDataService, MarketSnapshot } from "@/types/platform";
 
@@ -10,6 +13,11 @@ interface MarketDataContextValue extends MarketSnapshot {
 
 const Ctx = createContext<MarketDataContextValue | null>(null);
 
+/**
+ * Boots the framework-free engine layer (market data, logging, diagnostics)
+ * and exposes the market snapshot to React. The engines themselves keep
+ * running independently of which route is mounted.
+ */
 export function MarketDataProvider({
   children,
   service,
@@ -17,26 +25,30 @@ export function MarketDataProvider({
   children: ReactNode;
   service?: MarketDataService;
 }) {
-  const serviceRef = useRef<MarketDataService>(service ?? new PollingMarketDataService());
-  const [snapshot, setSnapshot] = useState<MarketSnapshot>(() => serviceRef.current.getSnapshot());
+  const transport = service ?? marketDataEngine.transport;
+  const [snapshot, setSnapshot] = useState<MarketSnapshot>(() => transport.getSnapshot());
 
   useEffect(() => {
-    const svc = serviceRef.current;
-    const unsub = svc.subscribe(setSnapshot);
-    svc.start();
+    // Ensure every engine is registered before the first start pass.
+    engines.register(marketDataEngine);
+    engines.register(loggingEngine);
+    engines.register(diagnosticsEngine);
+
+    const unsub = transport.subscribe(setSnapshot);
+    void engines.startAll();
     return () => {
       unsub();
-      svc.stop();
+      void engines.stopAll();
     };
-  }, []);
+  }, [transport]);
 
   useEffect(() => {
     setDiagnostics({ marketStatus: `${snapshot.status}/${snapshot.marketStatus}` });
   }, [snapshot.status, snapshot.marketStatus]);
 
   const value = useMemo<MarketDataContextValue>(
-    () => ({ ...snapshot, service: serviceRef.current, refresh: () => serviceRef.current.refresh() }),
-    [snapshot],
+    () => ({ ...snapshot, service: transport, refresh: () => transport.refresh() }),
+    [snapshot, transport],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
