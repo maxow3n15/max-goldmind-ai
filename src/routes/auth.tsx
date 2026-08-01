@@ -26,9 +26,12 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    installSessionPersistence();
+    setRemember(getRememberMe());
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) navigate({ to: "/dashboard", replace: true });
     });
@@ -38,6 +41,7 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
+      setRememberMe(remember);
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email, password,
@@ -58,6 +62,7 @@ function AuthPage() {
       toast.error(err?.message ?? "Authentication failed");
     } finally { setLoading(false); }
   };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10">
