@@ -154,6 +154,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const lastAnalyseRef = useRef(0);
   const lastAnalysedPriceRef = useRef<number | null>(null);
   const managedRef = useRef<Set<string>>(new Set());
+  const cycleRef = useRef<{ id: string; startedAt: number } | null>(null);
+  const loggedCycleRef = useRef<string | null>(null);
+
 
   const log = useCallback((level: AutopilotEvent["level"], message: string, detail?: string) => {
     setEvents((prev) => {
