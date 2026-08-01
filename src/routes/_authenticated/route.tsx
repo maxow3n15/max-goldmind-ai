@@ -12,11 +12,18 @@ import { AutopilotWidget } from "@/components/AutopilotWidget";
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
+    installSessionPersistence();
+    // Drop any persisted session the user never consented to (no "Remember me").
+    if (purgeUnconsentedSession()) {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+      throw redirect({ to: "/auth" });
+    }
     const { data, error } = await supabase.auth.getUser();
     if (error || !data.user) throw redirect({ to: "/auth" });
     setDiagnostics({ userId: data.user.id, userEmail: data.user.email ?? null });
     return { user: data.user };
   },
+
   pendingComponent: () => <PlatformLoading stage="Checking Authentication…" />,
   component: AuthenticatedLayout,
 });
