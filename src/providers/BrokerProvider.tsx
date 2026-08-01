@@ -101,12 +101,23 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
       }
     : EMPTY_ACCOUNT;
 
-  // No real broker yet: the paper engine is a mocked-but-persistent broker.
-  const connection: BrokerConnection = snapshot.isError
-    ? "disconnected"
-    : isTradingServerConfigured()
-      ? "connected"
-      : "mock";
+  // Live mode reports the real broker connection; paper mode is a
+  // mocked-but-persistent internal broker.
+  const connection: BrokerConnection =
+    tradingMode === "live"
+      ? defaultBroker?.status === "connected"
+        ? "connected"
+        : "disconnected"
+      : snapshot.isError
+        ? "disconnected"
+        : isTradingServerConfigured()
+          ? "connected"
+          : "mock";
+
+  const brokerName =
+    tradingMode === "live"
+      ? (defaultBroker?.label || defaultBroker?.account_name || defaultBroker?.broker_id || "No broker selected")
+      : "GoldMind Paper Broker";
 
   useEffect(() => {
     setDiagnostics({
@@ -116,16 +127,17 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
   }, [connection, openPositions]);
 
   const value = useMemo<BrokerContextValue>(() => ({
-    name: isTradingServerConfigured() ? "External Trading Server" : "GoldMind Paper Broker",
+    name: brokerName,
     connection,
-    tradingMode: "paper",
+    tradingMode,
     account,
     openPositions,
     closedPositions,
     pendingOrders,
     loading: snapshot.isLoading || trades.isLoading,
-    refresh: () => { void snapshot.refetch(); void trades.refetch(); },
-  }), [connection, account, openPositions, closedPositions, pendingOrders, snapshot, trades]);
+    refresh: () => { void snapshot.refetch(); void trades.refetch(); void brokers.refetch(); },
+  }), [brokerName, connection, tradingMode, account, openPositions, closedPositions, pendingOrders, snapshot, trades, brokers]);
+
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
