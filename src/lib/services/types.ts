@@ -45,7 +45,7 @@ export interface ConfluenceReport {
   breakdown: CheckResult[];      // weighted confluences
 }
 
-export type EngineMode = "paper" | "mt5";
+export type EngineMode = "paper" | "live" | "mt5";
 
 // Every executor speaks the same shape. The Paper executor writes to the
 // database; the MT5 executor is intentionally an unimplemented placeholder.
