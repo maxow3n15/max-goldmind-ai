@@ -143,6 +143,69 @@ export type Database = {
         }
         Relationships: []
       }
+      decision_logs: {
+        Row: {
+          blockers: Json
+          confidence: number | null
+          created_at: string
+          cycle_id: string
+          decided_at: string
+          direction: string | null
+          id: string
+          latency: Json
+          news_score: number | null
+          outcome: string
+          payload: Json
+          price: number | null
+          reasoning: Json
+          spread: number | null
+          symbol: string
+          technical_score: number | null
+          timeframe: string
+          user_id: string
+        }
+        Insert: {
+          blockers?: Json
+          confidence?: number | null
+          created_at?: string
+          cycle_id: string
+          decided_at?: string
+          direction?: string | null
+          id?: string
+          latency?: Json
+          news_score?: number | null
+          outcome: string
+          payload?: Json
+          price?: number | null
+          reasoning?: Json
+          spread?: number | null
+          symbol?: string
+          technical_score?: number | null
+          timeframe: string
+          user_id: string
+        }
+        Update: {
+          blockers?: Json
+          confidence?: number | null
+          created_at?: string
+          cycle_id?: string
+          decided_at?: string
+          direction?: string | null
+          id?: string
+          latency?: Json
+          news_score?: number | null
+          outcome?: string
+          payload?: Json
+          price?: number | null
+          reasoning?: Json
+          spread?: number | null
+          symbol?: string
+          technical_score?: number | null
+          timeframe?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       paper_account: {
         Row: {
           balance: number
