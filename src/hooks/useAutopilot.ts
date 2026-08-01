@@ -32,6 +32,9 @@ import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.type
 import type { QuantIntel } from "@/lib/services/quant.types";
 import { buildLadderPlans, createPaperExecutionEngine, createLiveExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
 import { listBrokerConnections, placeLiveOrder, closeLiveOrder, modifyLiveOrder } from "@/lib/brokers.functions";
+import { bus, type DecisionSnapshot } from "@/engines/kernel/event-bus";
+import { metrics } from "@/engines/kernel/metrics";
+
 
 import type {
   AutopilotEvent,
