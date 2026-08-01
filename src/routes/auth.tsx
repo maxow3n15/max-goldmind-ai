@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Zap } from "lucide-react";
 import { toast } from "sonner";
+import { getRememberMe, installSessionPersistence, setRememberMe } from "@/lib/session-persistence";
+
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
@@ -24,9 +26,12 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    installSessionPersistence();
+    setRemember(getRememberMe());
     supabase.auth.getUser().then(({ data }) => {
       if (data.user) navigate({ to: "/dashboard", replace: true });
     });
@@ -36,6 +41,7 @@ function AuthPage() {
     e.preventDefault();
     setLoading(true);
     try {
+      setRememberMe(remember);
       if (mode === "signup") {
         const { error } = await supabase.auth.signUp({
           email, password,
@@ -56,6 +62,7 @@ function AuthPage() {
       toast.error(err?.message ?? "Authentication failed");
     } finally { setLoading(false); }
   };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-10">
@@ -93,7 +100,17 @@ function AuthPage() {
               <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} placeholder="••••••••"
                 className="w-full px-3 py-2.5 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-[color:var(--gold)]/40 text-sm" />
             </div>
+            <label className="flex items-center gap-2.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-border bg-input accent-[color:var(--gold)]"
+              />
+              Remember me — stay signed in on this device until I sign out
+            </label>
             <button type="submit" disabled={loading}
+
               className="w-full py-2.5 rounded-lg font-medium text-[color:var(--gold-foreground)] disabled:opacity-60"
               style={{ background: "var(--gradient-gold)", boxShadow: "var(--shadow-gold)" }}>
               {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}

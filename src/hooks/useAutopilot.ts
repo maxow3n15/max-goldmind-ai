@@ -30,7 +30,9 @@ import { buildManagementPlan } from "@/lib/services/trade-management";
 import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report";
 import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
 import type { QuantIntel } from "@/lib/services/quant.types";
-import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
+import { buildLadderPlans, createPaperExecutionEngine, createLiveExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
+import { listBrokerConnections, placeLiveOrder, closeLiveOrder, modifyLiveOrder } from "@/lib/brokers.functions";
+
 import type {
   AutopilotEvent,
   ConfluenceReport,
@@ -107,13 +109,44 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     [quant?.volatility, quant?.momentum],
   );
 
+  // Execution destination: paper engine, or the user's connected broker.
+  // The AI, risk and management logic is identical either way.
   const openFn = useServerFn(openPaperTrade);
   const closeFn = useServerFn(closePaperTrade);
   const patchStopFn = useServerFn(updateTradeStop);
+  const placeLiveFn = useServerFn(placeLiveOrder);
+  const closeLiveFn = useServerFn(closeLiveOrder);
+  const modifyLiveFn = useServerFn(modifyLiveOrder);
+  const brokersFn = useServerFn(listBrokerConnections);
+
+  const brokersQuery = useQuery({
+    queryKey: ["broker-connections"],
+    queryFn: () => brokersFn(),
+    refetchInterval: 30_000,
+  });
+  const defaultBroker = useMemo(() => {
+    const rows: any[] = Array.isArray(brokersQuery.data) ? brokersQuery.data : [];
+    return rows.find((r) => r.is_default) ?? null;
+  }, [brokersQuery.data]);
+
+  const tradingMode: "paper" | "live" =
+    (settings.data as any)?.trading_mode === "live" ? "live" : "paper";
+  const spread = market.quote?.spread ?? null;
+
   const executor = useMemo(
-    () => createPaperExecutionEngine({ open: openFn, close: closeFn, patchStop: patchStopFn }),
-    [openFn, closeFn, patchStopFn],
+    () =>
+      tradingMode === "live"
+        ? createLiveExecutionEngine({
+            place: placeLiveFn,
+            close: closeLiveFn,
+            patchStop: modifyLiveFn,
+            connected: !!defaultBroker && defaultBroker.status === "connected",
+            spread,
+          })
+        : createPaperExecutionEngine({ open: openFn, close: closeFn, patchStop: patchStopFn }),
+    [tradingMode, placeLiveFn, closeLiveFn, modifyLiveFn, defaultBroker, spread, openFn, closeFn, patchStopFn],
   );
+
   const inFlightRef = useRef(false);
   const lastAnalyseRef = useRef(0);
   const lastAnalysedPriceRef = useRef<number | null>(null);

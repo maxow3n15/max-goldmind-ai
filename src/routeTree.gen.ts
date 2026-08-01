@@ -12,10 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedTradingModeRouteImport } from './routes/_authenticated/trading-mode'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/macro'
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedBrokerConnectionsRouteImport } from './routes/_authenticated/broker-connections'
 import { Route as AuthenticatedAutopilotRouteImport } from './routes/_authenticated/autopilot'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
@@ -35,6 +37,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedTradingModeRoute =
+  AuthenticatedTradingModeRouteImport.update({
+    id: '/trading-mode',
+    path: '/trading-mode',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -55,6 +63,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedBrokerConnectionsRoute =
+  AuthenticatedBrokerConnectionsRouteImport.update({
+    id: '/broker-connections',
+    path: '/broker-connections',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedAutopilotRoute = AuthenticatedAutopilotRouteImport.update({
   id: '/autopilot',
   path: '/autopilot',
@@ -82,10 +96,12 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/autopilot': typeof AuthenticatedAutopilotRoute
+  '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
 export interface FileRoutesByTo {
@@ -94,10 +110,12 @@ export interface FileRoutesByTo {
   '/analytics': typeof AuthenticatedAnalyticsRoute
   '/assistant': typeof AuthenticatedAssistantRoute
   '/autopilot': typeof AuthenticatedAutopilotRoute
+  '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
 export interface FileRoutesById {
@@ -108,10 +126,12 @@ export interface FileRoutesById {
   '/_authenticated/analytics': typeof AuthenticatedAnalyticsRoute
   '/_authenticated/assistant': typeof AuthenticatedAssistantRoute
   '/_authenticated/autopilot': typeof AuthenticatedAutopilotRoute
+  '/_authenticated/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
   '/_authenticated/macro': typeof AuthenticatedMacroRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
 }
 export interface FileRouteTypes {
@@ -122,10 +142,12 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assistant'
     | '/autopilot'
+    | '/broker-connections'
     | '/dashboard'
     | '/journal'
     | '/macro'
     | '/settings'
+    | '/trading-mode'
     | '/api/public/market/xauusd'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -134,10 +156,12 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/assistant'
     | '/autopilot'
+    | '/broker-connections'
     | '/dashboard'
     | '/journal'
     | '/macro'
     | '/settings'
+    | '/trading-mode'
     | '/api/public/market/xauusd'
   id:
     | '__root__'
@@ -147,10 +171,12 @@ export interface FileRouteTypes {
     | '/_authenticated/analytics'
     | '/_authenticated/assistant'
     | '/_authenticated/autopilot'
+    | '/_authenticated/broker-connections'
     | '/_authenticated/dashboard'
     | '/_authenticated/journal'
     | '/_authenticated/macro'
     | '/_authenticated/settings'
+    | '/_authenticated/trading-mode'
     | '/api/public/market/xauusd'
   fileRoutesById: FileRoutesById
 }
@@ -184,6 +210,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/trading-mode': {
+      id: '/_authenticated/trading-mode'
+      path: '/trading-mode'
+      fullPath: '/trading-mode'
+      preLoaderRoute: typeof AuthenticatedTradingModeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/settings': {
       id: '/_authenticated/settings'
       path: '/settings'
@@ -210,6 +243,13 @@ declare module '@tanstack/react-router' {
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/broker-connections': {
+      id: '/_authenticated/broker-connections'
+      path: '/broker-connections'
+      fullPath: '/broker-connections'
+      preLoaderRoute: typeof AuthenticatedBrokerConnectionsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/autopilot': {
@@ -247,20 +287,24 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAnalyticsRoute: typeof AuthenticatedAnalyticsRoute
   AuthenticatedAssistantRoute: typeof AuthenticatedAssistantRoute
   AuthenticatedAutopilotRoute: typeof AuthenticatedAutopilotRoute
+  AuthenticatedBrokerConnectionsRoute: typeof AuthenticatedBrokerConnectionsRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
   AuthenticatedMacroRoute: typeof AuthenticatedMacroRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTradingModeRoute: typeof AuthenticatedTradingModeRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAnalyticsRoute: AuthenticatedAnalyticsRoute,
   AuthenticatedAssistantRoute: AuthenticatedAssistantRoute,
   AuthenticatedAutopilotRoute: AuthenticatedAutopilotRoute,
+  AuthenticatedBrokerConnectionsRoute: AuthenticatedBrokerConnectionsRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,
   AuthenticatedMacroRoute: AuthenticatedMacroRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTradingModeRoute: AuthenticatedTradingModeRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
