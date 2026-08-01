@@ -100,7 +100,17 @@ function AuthPage() {
               <input required type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={6} placeholder="••••••••"
                 className="w-full px-3 py-2.5 rounded-lg bg-input border border-border focus:outline-none focus:ring-2 focus:ring-[color:var(--gold)]/40 text-sm" />
             </div>
+            <label className="flex items-center gap-2.5 text-xs text-muted-foreground cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={remember}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="h-4 w-4 rounded border-border bg-input accent-[color:var(--gold)]"
+              />
+              Remember me — stay signed in on this device until I sign out
+            </label>
             <button type="submit" disabled={loading}
+
               className="w-full py-2.5 rounded-lg font-medium text-[color:var(--gold-foreground)] disabled:opacity-60"
               style={{ background: "var(--gradient-gold)", boxShadow: "var(--shadow-gold)" }}>
               {loading ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}
