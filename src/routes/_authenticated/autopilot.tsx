@@ -97,7 +97,7 @@ function Autopilot() {
                 : "Autopilot is paused."}
           </div>
           <div className="text-xs opacity-80 mt-0.5">
-            The engine runs while this page is open. For 24/7 headless operation, deploy the external trading worker.
+            The engine keeps running on every page while this tab is open — use the corner widget to pause it or watch live trades. For 24/7 headless operation, deploy the external trading worker.
           </div>
         </div>
       </div>
