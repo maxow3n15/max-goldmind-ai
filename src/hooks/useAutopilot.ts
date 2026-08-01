@@ -30,7 +30,9 @@ import { buildManagementPlan } from "@/lib/services/trade-management";
 import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report";
 import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
 import type { QuantIntel } from "@/lib/services/quant.types";
-import { buildLadderPlans, createPaperExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
+import { buildLadderPlans, createPaperExecutionEngine, createLiveExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
+import { listBrokerConnections, placeLiveOrder, closeLiveOrder, modifyLiveOrder } from "@/lib/brokers.functions";
+
 import type {
   AutopilotEvent,
   ConfluenceReport,
