@@ -46,8 +46,9 @@ export const recordDecisions = createServerFn({ method: "POST" })
       blockers: d.blockers,
       price: d.price,
       spread: d.spread,
-      latency: d.latency,
-      payload: d.payload,
+      latency: d.latency as Record<string, number>,
+      payload: d.payload as Record<string, never>,
+
     }));
 
     const { error } = await context.supabase
