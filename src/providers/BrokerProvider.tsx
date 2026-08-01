@@ -53,12 +53,26 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
   const market = useMarketDataContext();
   const snapFn = useServerFn(getAccountSnapshot);
   const tradesFn = useServerFn(listTrades);
+  const settingsFn = useServerFn(getUserSettings);
+  const brokersFn = useServerFn(listBrokerConnections);
 
   const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
   const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn() });
+  const brokers = useQuery({
+    queryKey: ["broker-connections"],
+    queryFn: () => brokersFn(),
+    refetchInterval: 30_000,
+  });
+
+  const tradingMode: "paper" | "live" =
+    (settings.data as any)?.trading_mode === "live" ? "live" : "paper";
+  const defaultBroker: any =
+    (Array.isArray(brokers.data) ? (brokers.data as any[]) : []).find((b) => b.is_default) ?? null;
 
   const rows: any[] = Array.isArray(trades.data) ? trades.data : [];
   const price = market.quote?.mid ?? null;
+
 
   const openPositions = useMemo(
     () => rows.filter((t) => t.status === "open").map((t) => toPosition(t, price)),
