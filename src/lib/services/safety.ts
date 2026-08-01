@@ -23,7 +23,7 @@ export interface SafetyInput {
   composite?: CompositeConfidence | null;
 }
 
-const MIN_CONFIDENCE = 88;
+const MIN_CONFIDENCE = 76;
 const MIN_RR = 2.0;
 const MAX_SPREAD = 0.5;
 
