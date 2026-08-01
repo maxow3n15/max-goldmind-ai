@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getAccountSnapshot, listTrades } from "@/lib/trades.functions";
+import { getUserSettings } from "@/lib/settings.functions";
+import { listBrokerConnections } from "@/lib/brokers.functions";
+
 import { isTradingServerConfigured } from "@/lib/trading-server";
 import { setDiagnostics } from "@/lib/platform-context";
 import { useMarketDataContext } from "./MarketDataProvider";
