@@ -233,24 +233,40 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     if (analysing) return;
     if (!market.quote?.mid) return;
     setAnalysing(true);
+    const cycleId = crypto.randomUUID();
+    cycleRef.current = { id: cycleId, startedAt: Date.now() };
+    bus.emit("ai:started", { cycleId, timeframe });
+    const endAi = metrics.start("ai");
     try {
       const res: any = await analyzeFn({ data: { timeframe, session: currentSession(), price: market.quote.mid } });
+      const aiMs = endAi();
       setAnalysis(res);
+      const endConf = metrics.start("confluence");
       const conf = computeConfluence({
         analysis: res,
         htfBias: res?.bias ?? null,
         spread: market.quote?.spread ?? null,
       });
+      endConf();
       setConfluence(conf);
       lastAnalysedPriceRef.current = market.quote.mid;
       lastAnalyseRef.current = Date.now();
-      log("info", `Analysis refreshed — ${res?.bias ?? "?"} · ${conf.score}% confluence`);
+      bus.emit("ai:completed", {
+        cycleId,
+        durationMs: Math.round(aiMs),
+        bias: res?.bias ?? null,
+        confidence: conf.score,
+      });
+      log("info", `Analysis refreshed — ${res?.bias ?? "?"} · ${conf.score}% confluence · ${Math.round(aiMs)}ms`);
     } catch (e: any) {
+      endAi();
+      bus.emit("ai:failed", { cycleId, error: e?.message ?? "analysis failed" });
       log("error", "Analysis failed", e?.message);
     } finally {
       setAnalysing(false);
     }
   }, [analyzeFn, market.quote?.mid, market.quote?.spread, timeframe, analysing, log]);
+
 
   // Cadence: every analysisIntervalMs, or when price drifts > 0.15%.
   useEffect(() => {
