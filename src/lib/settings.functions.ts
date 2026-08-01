@@ -36,3 +36,38 @@ export const updateUserSettings = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { ok: true };
   });
+
+const TradingModeInput = z.object({ trading_mode: z.enum(["paper", "live"]) });
+
+/**
+ * Switches paper / live execution. Live mode requires a connected default
+ * broker account — enforced server-side so the UI cannot bypass it.
+ */
+export const setTradingMode = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => TradingModeInput.parse(d))
+  .handler(async ({ data, context }) => {
+    if (data.trading_mode === "live") {
+      const { data: conn } = await context.supabase
+        .from("broker_connections")
+        .select("id, status")
+        .eq("user_id", context.userId)
+        .eq("is_default", true)
+        .maybeSingle();
+      if (!conn) return { ok: false as const, reason: "Connect a broker and set a default execution account first." };
+      if (conn.status !== "connected") {
+        return { ok: false as const, reason: `Default broker connection is ${conn.status}. Reconnect it first.` };
+      }
+    }
+    const { error } = await context.supabase
+      .from("user_settings")
+      .update({
+        trading_mode: data.trading_mode,
+        live_trading_enabled: data.trading_mode === "live",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
