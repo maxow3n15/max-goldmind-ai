@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight } from "lucide-react";
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight, Activity } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -15,7 +15,9 @@ const NAV = [
   { to: "/assistant", label: "AI Assistant", icon: Sparkles },
   { to: "/journal", label: "Journal", icon: BookOpen },
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
+  { to: "/diagnostics", label: "Diagnostics", icon: Activity },
   { to: "/settings", label: "Settings", icon: Settings },
+
 ] as const;
 
 export function AppShell({ children }: { children: ReactNode }) {
