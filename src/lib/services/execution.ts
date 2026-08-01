@@ -50,24 +50,54 @@ export function createPaperExecutionEngine(fns: {
   };
 }
 
-// Placeholder for a future MT5 bridge. This deliberately throws so the
-// autopilot can never silently pretend a live order went through. When
-// the real bridge exists it will implement the same interface.
-export function createMt5ExecutionEngineStub(): ExecutionEngine {
-  const unavailable = () => {
-    throw new Error(
-      "MT5 execution bridge not connected. Set VITE_TRADING_SERVER_URL and " +
-      "deploy the external MT5 connector service to enable live execution.",
-    );
-  };
+// Live broker execution. The AI emits one standard trade plan; the server
+// translates it for whichever broker connector the user made default and
+// re-runs every safety gate before the order leaves our infrastructure.
+// If the broker rejects the order we surface the real reason — never a
+// fabricated fill.
+export function createLiveExecutionEngine(fns: {
+  place: BoundFn;
+  close: BoundFn;
+  patchStop: BoundFn;
+  connected: boolean;
+  spread?: number | null;
+}): ExecutionEngine {
+  const { place, close, patchStop } = fns;
   return {
-    mode: "mt5",
-    connected: false,
-    submit: unavailable,
-    closeAtPrice: unavailable,
-    updateStops: unavailable,
+    mode: "live",
+    connected: fns.connected,
+    async submit(plan: TradePlan) {
+      const res: any = await place({
+        data: {
+          direction: plan.direction,
+          entry_price: plan.entry,
+          stop_loss: plan.stop_loss,
+          take_profit_1: plan.take_profit_1 ?? undefined,
+          take_profit_2: plan.take_profit_2 ?? undefined,
+          take_profit_3: plan.take_profit_3 ?? undefined,
+          lot_size: plan.lot_size,
+          spread: fns.spread ?? undefined,
+          confidence: plan.confidence,
+          timeframe: plan.timeframe,
+          session: plan.session,
+          reason_entry: plan.reason,
+          ai_analysis: plan.ai_analysis,
+        },
+      });
+      if (!res?.ok) throw new Error(res?.reason ?? "Broker rejected the order");
+      return { id: res.trade.id, broker_id: res.broker_order_id ?? null };
+    },
+    async closeAtPrice(id, price, reason) {
+      const res: any = await close({ data: { id, exit_price: price, reason_exit: reason } });
+      return { pnl: Number(res?.pnl ?? 0) };
+    },
+    async updateStops(id, patch) {
+      if (patch.stop_loss == null) return;
+      await patchStop({ data: { id, stop_loss: patch.stop_loss } });
+    },
   };
 }
+
 
 // Hard cap on risk for any single autopilot leg (percent of balance).
 export const MAX_RISK_PER_LEG_PCT = 0.5;
