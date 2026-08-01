@@ -23,6 +23,7 @@ import { Route as AuthenticatedBrokerConnectionsRouteImport } from './routes/_au
 import { Route as AuthenticatedAutopilotRouteImport } from './routes/_authenticated/autopilot'
 import { Route as AuthenticatedAssistantRouteImport } from './routes/_authenticated/assistant'
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
+import { Route as ApiPublicWebhookTokenRouteImport } from './routes/api/public/webhook/$token'
 import { Route as ApiPublicMarketXauusdRouteImport } from './routes/api/public/market/xauusd'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -97,6 +98,11 @@ const AuthenticatedAnalyticsRoute = AuthenticatedAnalyticsRouteImport.update({
   path: '/analytics',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicWebhookTokenRoute = ApiPublicWebhookTokenRouteImport.update({
+  id: '/api/public/webhook/$token',
+  path: '/api/public/webhook/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicMarketXauusdRoute = ApiPublicMarketXauusdRouteImport.update({
   id: '/api/public/market/xauusd',
   path: '/api/public/market/xauusd',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/trading-mode': typeof AuthenticatedTradingModeRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
+  '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   id:
     | '__root__'
     | '/'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/trading-mode'
     | '/api/public/market/xauusd'
+    | '/api/public/webhook/$token'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -211,6 +223,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicMarketXauusdRoute: typeof ApiPublicMarketXauusdRoute
+  ApiPublicWebhookTokenRoute: typeof ApiPublicWebhookTokenRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -313,6 +326,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAnalyticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/webhook/$token': {
+      id: '/api/public/webhook/$token'
+      path: '/api/public/webhook/$token'
+      fullPath: '/api/public/webhook/$token'
+      preLoaderRoute: typeof ApiPublicWebhookTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/market/xauusd': {
       id: '/api/public/market/xauusd'
       path: '/api/public/market/xauusd'
@@ -358,6 +378,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicMarketXauusdRoute: ApiPublicMarketXauusdRoute,
+  ApiPublicWebhookTokenRoute: ApiPublicWebhookTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
