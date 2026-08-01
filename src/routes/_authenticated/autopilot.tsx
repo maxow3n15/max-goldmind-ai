@@ -31,8 +31,8 @@ const TIMEFRAMES = [
 ] as const;
 
 function Autopilot() {
-  const [timeframe, setTimeframe] = useState<string>("15");
-  const a = useAutopilot({ timeframe });
+  const a = useAutopilotContext();
+  const { timeframe, setTimeframe } = a;
 
   const setup = a.analysis?.setup ?? null;
   const conf = a.confluence?.score ?? a.analysis?.confidence ?? 0;
