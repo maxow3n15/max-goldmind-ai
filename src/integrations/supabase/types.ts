@@ -50,6 +50,75 @@ export type Database = {
         }
         Relationships: []
       }
+      broker_connections: {
+        Row: {
+          account_name: string | null
+          account_number: string | null
+          account_type: string
+          balance: number | null
+          broker_id: string
+          created_at: string
+          credentials_ciphertext: string
+          currency: string
+          equity: number | null
+          free_margin: number | null
+          id: string
+          is_default: boolean
+          label: string | null
+          last_error: string | null
+          last_sync_at: string | null
+          margin_level: number | null
+          open_positions: number
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_name?: string | null
+          account_number?: string | null
+          account_type?: string
+          balance?: number | null
+          broker_id: string
+          created_at?: string
+          credentials_ciphertext: string
+          currency?: string
+          equity?: number | null
+          free_margin?: number | null
+          id?: string
+          is_default?: boolean
+          label?: string | null
+          last_error?: string | null
+          last_sync_at?: string | null
+          margin_level?: number | null
+          open_positions?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string | null
+          account_number?: string | null
+          account_type?: string
+          balance?: number | null
+          broker_id?: string
+          created_at?: string
+          credentials_ciphertext?: string
+          currency?: string
+          equity?: number | null
+          free_margin?: number | null
+          id?: string
+          is_default?: boolean
+          label?: string | null
+          last_error?: string | null
+          last_sync_at?: string | null
+          margin_level?: number | null
+          open_positions?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
@@ -215,6 +284,7 @@ export type Database = {
           preferred_session: string
           preferred_timeframe: string
           risk_per_trade: number
+          trading_mode: string
           updated_at: string
           user_id: string
         }
@@ -232,6 +302,7 @@ export type Database = {
           preferred_session?: string
           preferred_timeframe?: string
           risk_per_trade?: number
+          trading_mode?: string
           updated_at?: string
           user_id: string
         }
@@ -249,6 +320,7 @@ export type Database = {
           preferred_session?: string
           preferred_timeframe?: string
           risk_per_trade?: number
+          trading_mode?: string
           updated_at?: string
           user_id?: string
         }
