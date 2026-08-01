@@ -446,16 +446,26 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     }
 
     (async () => {
+      const cycleId = cycleRef.current?.id ?? "manual";
       for (const [i, plan] of toOpen.entries()) {
+        const endExec = metrics.start("execution");
         try {
           await executor.submit(plan);
+          const ms = endExec();
+          bus.emit("execution:submitted", {
+            cycleId, direction: plan.direction, entry: plan.entry,
+            lots: plan.lot_size, leg: i + 1, legs: toOpen.length,
+          });
           log("success",
             `Opened ${plan.direction} leg ${i + 1}/${toOpen.length} @ ${plan.entry.toFixed(2)} · ${plan.lot_size} lots → TP ${plan.take_profit_1.toFixed(2)}`,
-            `Risk ${riskPctPerLeg}% · Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)}`);
+            `Risk ${riskPctPerLeg}% · Confidence ${plan.confidence}% · R:R ${plan.risk_reward.toFixed(2)} · ${Math.round(ms)}ms`);
         } catch (e: any) {
+          endExec();
+          bus.emit("execution:failed", { cycleId, error: e?.message ?? "execution failed" });
           log("error", `Leg ${i + 1} rejected by execution engine`, e?.message);
         }
       }
+
       toast.success(`Autopilot opened ${toOpen.length} paper trade${toOpen.length > 1 ? "s" : ""}`);
       qc.invalidateQueries({ queryKey: ["trades"] });
       qc.invalidateQueries({ queryKey: ["snapshot"] });
