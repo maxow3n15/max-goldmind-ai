@@ -1,13 +1,16 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper } from "lucide-react";
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { setRememberMe } from "@/lib/session-persistence";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/autopilot", label: "Autopilot", icon: Bot },
+  { to: "/broker-connections", label: "Brokers", icon: Link2 },
+  { to: "/trading-mode", label: "Trading Mode", icon: ToggleRight },
   { to: "/macro", label: "Market Intel", icon: Newspaper },
   { to: "/assistant", label: "AI Assistant", icon: Sparkles },
   { to: "/journal", label: "Journal", icon: BookOpen },
@@ -23,9 +26,11 @@ export function AppShell({ children }: { children: ReactNode }) {
   const signOut = async () => {
     await qc.cancelQueries();
     qc.clear();
+    setRememberMe(false);
     await supabase.auth.signOut();
     navigate({ to: "/auth", replace: true });
   };
+
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
