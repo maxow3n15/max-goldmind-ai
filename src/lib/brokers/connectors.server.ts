@@ -336,21 +336,10 @@ const alpaca: BrokerConnector = {
       open_positions: Array.isArray(positions) ? positions.length : 0,
     };
   },
-  async placeOrder(c, o) {
-    const base = alpacaBase(c["environment"] ?? "paper");
-    const res = await req(`${base}/v2/orders`, {
-      label: "Alpaca order",
-      method: "POST",
-      headers: alpacaHeaders(c),
-      body: JSON.stringify({
-        symbol: c["symbol"] || "GLD",
-        qty: o.volume,
-        side: o.direction.toLowerCase(),
-        type: "market",
-        time_in_force: "day",
-      }),
-    });
-    return { broker_order_id: String(res.id ?? "") };
+  async placeOrder() {
+    // Alpaca has no XAUUSD spot/CFD instrument. Submitting a GLD (ETF) order
+    // here would give basis-risk exposure that does not track the gold analysis.
+    throw new Error(ALPACA_UNSUPPORTED);
   },
   async closePosition(c, positionId) {
     const base = alpacaBase(c["environment"] ?? "paper");
