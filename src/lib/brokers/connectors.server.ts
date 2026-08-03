@@ -369,6 +369,55 @@ const bridgeHeaders = (c: Record<string, string>) => ({
   "Content-Type": "application/json",
 });
 
+/** Validate a user-supplied bridge URL to prevent SSRF against internal hosts. */
+function bridgeBase(c: Record<string, string>): string {
+  const raw = (c["baseUrl"] ?? "").trim();
+  if (!raw) throw new Error("Bridge URL is required");
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("Bridge URL is not a valid URL");
+  }
+
+  if (url.protocol !== "https:") {
+    throw new Error("Bridge URL must use https://");
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  const blockedNames = ["localhost", "0.0.0.0", "::", "::1", "[::1]", "metadata.google.internal"];
+  if (blockedNames.includes(host) || host.endsWith(".localhost") || host.endsWith(".internal") || host.endsWith(".local")) {
+    throw new Error(`Bridge URL host "${url.hostname}" is not allowed (internal address)`);
+  }
+
+  // IPv4 literal checks (loopback, private, link-local).
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    const isPrivate =
+      a === 0 ||
+      a === 127 ||
+      a === 10 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254);
+    if (isPrivate) {
+      throw new Error(`Bridge URL host "${url.hostname}" is not allowed (private or loopback address)`);
+    }
+  }
+
+  // IPv6 loopback / unique-local / link-local literals.
+  if (host.includes(":")) {
+    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) {
+      throw new Error(`Bridge URL host "${url.hostname}" is not allowed (private or loopback address)`);
+    }
+  }
+
+  return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
+}
+
 const bridge: BrokerConnector = {
   id: "bridge",
   async fetchAccount(c) {
