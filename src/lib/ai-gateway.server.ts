@@ -1,5 +1,6 @@
 // Server-only. Talks to Lovable AI Gateway (OpenAI-compatible).
 const BASE = "https://ai.gateway.lovable.dev/v1";
+const REQUEST_TIMEOUT_MS = 30_000;
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
