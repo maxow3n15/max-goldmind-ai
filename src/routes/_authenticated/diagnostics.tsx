@@ -95,6 +95,8 @@ function DiagnosticsPage() {
           <MetricTile icon={Activity} label="Uptime" value={`${Math.round(diag.uptimeMs / 1000)}s`} />
         </div>
 
+        <HeartbeatPanel />
+
         <section className="glass-panel p-5">
           <h2 className="font-display font-semibold mb-1 flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-[color:var(--gold)]" /> Engine health
