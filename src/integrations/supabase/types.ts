@@ -167,6 +167,172 @@ export type Database = {
         }
         Relationships: []
       }
+      challenge_daily_stats: {
+        Row: {
+          created_at: string
+          day: string
+          end_equity: number
+          id: string
+          low_equity: number
+          peak_equity: number
+          pnl: number
+          profile_id: string
+          start_equity: number
+          trades: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          end_equity?: number
+          id?: string
+          low_equity?: number
+          peak_equity?: number
+          pnl?: number
+          profile_id: string
+          start_equity?: number
+          trades?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          end_equity?: number
+          id?: string
+          low_equity?: number
+          peak_equity?: number
+          pnl?: number
+          profile_id?: string
+          start_equity?: number
+          trades?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_daily_stats_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "challenge_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      challenge_profiles: {
+        Row: {
+          account_size: number
+          auto_enforce: boolean
+          broker_connection_id: string | null
+          consistency_rule_pct: number | null
+          created_at: string
+          currency: string
+          daily_loss_basis: string
+          daily_loss_limit_pct: number
+          daily_reset_utc_hour: number
+          drawdown_basis: string
+          drawdown_type: string
+          id: string
+          label: string
+          max_drawdown_pct: number
+          max_lot_size: number | null
+          max_trading_days: number | null
+          min_trading_days: number
+          news_restriction_minutes: number
+          notes: string | null
+          overnight_holding_allowed: boolean
+          phase: string
+          preset_key: string
+          profit_target_pct: number
+          provider: string
+          restrictions: Json
+          safety_buffer_pct: number
+          start_at: string
+          start_balance: number
+          status: string
+          updated_at: string
+          user_id: string
+          weekend_holding_allowed: boolean
+        }
+        Insert: {
+          account_size?: number
+          auto_enforce?: boolean
+          broker_connection_id?: string | null
+          consistency_rule_pct?: number | null
+          created_at?: string
+          currency?: string
+          daily_loss_basis?: string
+          daily_loss_limit_pct?: number
+          daily_reset_utc_hour?: number
+          drawdown_basis?: string
+          drawdown_type?: string
+          id?: string
+          label?: string
+          max_drawdown_pct?: number
+          max_lot_size?: number | null
+          max_trading_days?: number | null
+          min_trading_days?: number
+          news_restriction_minutes?: number
+          notes?: string | null
+          overnight_holding_allowed?: boolean
+          phase?: string
+          preset_key?: string
+          profit_target_pct?: number
+          provider?: string
+          restrictions?: Json
+          safety_buffer_pct?: number
+          start_at?: string
+          start_balance?: number
+          status?: string
+          updated_at?: string
+          user_id: string
+          weekend_holding_allowed?: boolean
+        }
+        Update: {
+          account_size?: number
+          auto_enforce?: boolean
+          broker_connection_id?: string | null
+          consistency_rule_pct?: number | null
+          created_at?: string
+          currency?: string
+          daily_loss_basis?: string
+          daily_loss_limit_pct?: number
+          daily_reset_utc_hour?: number
+          drawdown_basis?: string
+          drawdown_type?: string
+          id?: string
+          label?: string
+          max_drawdown_pct?: number
+          max_lot_size?: number | null
+          max_trading_days?: number | null
+          min_trading_days?: number
+          news_restriction_minutes?: number
+          notes?: string | null
+          overnight_holding_allowed?: boolean
+          phase?: string
+          preset_key?: string
+          profit_target_pct?: number
+          provider?: string
+          restrictions?: Json
+          safety_buffer_pct?: number
+          start_at?: string
+          start_balance?: number
+          status?: string
+          updated_at?: string
+          user_id?: string
+          weekend_holding_allowed?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "challenge_profiles_broker_connection_id_fkey"
+            columns: ["broker_connection_id"]
+            isOneToOne: false
+            referencedRelation: "broker_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           content: string

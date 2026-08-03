@@ -20,6 +20,7 @@ import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedChallengeRouteImport } from './routes/_authenticated/challenge'
 import { Route as AuthenticatedBrokerConnectionsRouteImport } from './routes/_authenticated/broker-connections'
 import { Route as AuthenticatedBacktestingRouteImport } from './routes/_authenticated/backtesting'
 import { Route as AuthenticatedAutopilotRouteImport } from './routes/_authenticated/autopilot'
@@ -84,6 +85,11 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedChallengeRoute = AuthenticatedChallengeRouteImport.update({
+  id: '/challenge',
+  path: '/challenge',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedBrokerConnectionsRoute =
   AuthenticatedBrokerConnectionsRouteImport.update({
     id: '/broker-connections',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/autopilot': typeof AuthenticatedAutopilotRoute
   '/backtesting': typeof AuthenticatedBacktestingRoute
   '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
+  '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/journal': typeof AuthenticatedJournalRoute
@@ -150,6 +157,7 @@ export interface FileRoutesByTo {
   '/autopilot': typeof AuthenticatedAutopilotRoute
   '/backtesting': typeof AuthenticatedBacktestingRoute
   '/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
+  '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/journal': typeof AuthenticatedJournalRoute
@@ -171,6 +179,7 @@ export interface FileRoutesById {
   '/_authenticated/autopilot': typeof AuthenticatedAutopilotRoute
   '/_authenticated/backtesting': typeof AuthenticatedBacktestingRoute
   '/_authenticated/broker-connections': typeof AuthenticatedBrokerConnectionsRoute
+  '/_authenticated/challenge': typeof AuthenticatedChallengeRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
@@ -192,6 +201,7 @@ export interface FileRouteTypes {
     | '/autopilot'
     | '/backtesting'
     | '/broker-connections'
+    | '/challenge'
     | '/dashboard'
     | '/diagnostics'
     | '/journal'
@@ -211,6 +221,7 @@ export interface FileRouteTypes {
     | '/autopilot'
     | '/backtesting'
     | '/broker-connections'
+    | '/challenge'
     | '/dashboard'
     | '/diagnostics'
     | '/journal'
@@ -231,6 +242,7 @@ export interface FileRouteTypes {
     | '/_authenticated/autopilot'
     | '/_authenticated/backtesting'
     | '/_authenticated/broker-connections'
+    | '/_authenticated/challenge'
     | '/_authenticated/dashboard'
     | '/_authenticated/diagnostics'
     | '/_authenticated/journal'
@@ -330,6 +342,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/challenge': {
+      id: '/_authenticated/challenge'
+      path: '/challenge'
+      fullPath: '/challenge'
+      preLoaderRoute: typeof AuthenticatedChallengeRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/broker-connections': {
       id: '/_authenticated/broker-connections'
       path: '/broker-connections'
@@ -388,6 +407,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAutopilotRoute: typeof AuthenticatedAutopilotRoute
   AuthenticatedBacktestingRoute: typeof AuthenticatedBacktestingRoute
   AuthenticatedBrokerConnectionsRoute: typeof AuthenticatedBrokerConnectionsRoute
+  AuthenticatedChallengeRoute: typeof AuthenticatedChallengeRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
@@ -403,6 +423,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAutopilotRoute: AuthenticatedAutopilotRoute,
   AuthenticatedBacktestingRoute: AuthenticatedBacktestingRoute,
   AuthenticatedBrokerConnectionsRoute: AuthenticatedBrokerConnectionsRoute,
+  AuthenticatedChallengeRoute: AuthenticatedChallengeRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,

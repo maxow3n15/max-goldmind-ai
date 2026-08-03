@@ -16,6 +16,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
+import { getChallengeStatus } from "@/lib/challenge.functions";
+import type { ChallengeStatus } from "@/lib/challenge/engine";
+
 import { getAccountSnapshot, listTrades, openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { getUserSettings } from "@/lib/settings.functions";
 import { computeConfluence } from "@/lib/services/confidence";
@@ -72,6 +75,19 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn() });
   const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
   const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
+
+  // Funded-account compliance. When no challenge account exists this stays
+  // null and the engine behaves exactly as before.
+  const challengeFn = useServerFn(getChallengeStatus);
+  const challengeQuery = useQuery({
+    queryKey: ["challenge-status", null],
+    queryFn: () => challengeFn({ data: {} }),
+    refetchInterval: 30_000,
+  });
+  const challengeProfile: any = challengeQuery.data?.profile ?? null;
+  const challengeStatus = (challengeQuery.data?.status ?? null) as ChallengeStatus | null;
+  const challengeEnforced = !!challengeProfile?.auto_enforce && challengeProfile?.status === "active" && !!challengeStatus;
+
 
   const [running, setRunning] = useState(false);
   const [killSwitch, setKillSwitch] = useState<KillSwitchState>({ active: false, reason: null, since: null });
@@ -328,10 +344,13 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       execConnected: executor.connected,
       macro,
       composite,
+      challenge: { enforced: challengeEnforced, status: challengeStatus },
     });
     setSafety(report);
   }, [analysis, confluence, market.quote, market.status, settings.data, snapshot.data,
-      openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected, macro, composite]);
+      openTrades, todayTradeCount, consecutiveLosses, killSwitch, executor.connected, macro, composite,
+      challengeEnforced, challengeStatus]);
+
 
   // --- Audit trail: every evaluated cycle is published exactly once,
   // whether the trade was taken or rejected. The logging engine batches
@@ -400,10 +419,28 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     const mult = composite
       ? sizeMultiplier(macro, composite, { volume: quant?.volume, volatility: quant?.volatility })
       : 1;
-    const riskPctPerLeg = Number((Math.min(
+    const targets = [setup.take_profit_1, setup.take_profit_2, setup.take_profit_3]
+      .filter((t: any) => t != null)
+      .map((t: any) => Number(t));
+
+    let riskPctPerLeg = Number((Math.min(
       MAX_RISK_PER_LEG_PCT,
       Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
     ) * mult).toFixed(3));
+
+    // Challenge compliance is the outer envelope: the whole ladder must fit
+    // inside the account's remaining margin for error, after its safety
+    // buffer. Whichever limit is stricter — strategy risk or challenge
+    // budget — is the one that applies.
+    if (challengeEnforced && challengeStatus) {
+      const legs = Math.max(1, targets.length);
+      const challengeCapPerLeg = challengeStatus.maxRiskPctForNextTrade / legs;
+      riskPctPerLeg = Number(Math.min(riskPctPerLeg * challengeStatus.sizeMultiplier, challengeCapPerLeg).toFixed(3));
+      if (riskPctPerLeg <= 0) {
+        log("warn", "Challenge budget exhausted", "No risk budget remains inside the account's safety buffer");
+        return;
+      }
+    }
 
     const base = {
       direction: setup.direction,
@@ -415,17 +452,30 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       timeframe,
       session: currentSession(),
       reason: analysis.explanation ?? "Autopilot",
-      ai_analysis: { ...analysis, macro, composite, quant, session_stats: sessionReport, management },
+      ai_analysis: {
+        ...analysis, macro, composite, quant, session_stats: sessionReport, management,
+        challenge: challengeEnforced && challengeStatus
+          ? {
+              profile_id: challengeProfile?.id ?? null,
+              provider: challengeProfile?.provider ?? null,
+              phase: challengeProfile?.phase ?? null,
+              posture: challengeStatus.posture,
+              pass_probability: challengeStatus.passProbability,
+              health: challengeStatus.health,
+              daily_used_pct: challengeStatus.daily.usedPct,
+              drawdown_used_pct: challengeStatus.drawdown.usedPct,
+            }
+          : null,
+      },
     };
 
     const plans = buildLadderPlans({
       base,
-      targets: [setup.take_profit_1, setup.take_profit_2, setup.take_profit_3]
-        .filter((t: any) => t != null)
-        .map((t: any) => Number(t)),
+      targets,
       balance,
       riskPctPerLeg,
     });
+
 
     if (plans.length === 0) return;
 
@@ -473,7 +523,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
       settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro,
-      quant, sessionReport, management]);
+      quant, sessionReport, management, challengeEnforced, challengeStatus, challengeProfile]);
+
 
   // Track rejection reasons for the UI (only when a setup exists and we
   // would have wanted to trade but couldn't).
