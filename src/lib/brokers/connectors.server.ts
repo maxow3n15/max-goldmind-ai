@@ -315,6 +315,9 @@ const alpacaHeaders = (c: Record<string, string>) => ({
   "Content-Type": "application/json",
 });
 
+const ALPACA_UNSUPPORTED =
+  "Alpaca does not support XAUUSD spot/CFD trading — GLD is a different instrument and cannot be used for this strategy's live execution";
+
 const alpaca: BrokerConnector = {
   id: "alpaca",
   async fetchAccount(c) {
