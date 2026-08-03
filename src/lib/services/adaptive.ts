@@ -27,7 +27,15 @@ export interface AdaptiveInput {
   calibration: CalibrationReport | null;
   /** Base confidence gate before adaptation (76 by default). */
   baseThreshold: number;
+  /**
+   * The user's own historical record in the market environment classified
+   * this cycle. Null (or too small a sample) leaves behaviour unchanged.
+   */
+  environmentTrackRecord?: { winRate: number; trades: number } | null;
 }
+
+/** Minimum closed trades in an environment before its record moves the gate. */
+export const ENVIRONMENT_MIN_SAMPLE = 8;
 
 export interface AdaptivePolicy {
   tier: PreservationTier;
@@ -115,6 +123,23 @@ export function buildAdaptivePolicy(i: AdaptiveInput): AdaptivePolicy {
       reasons.push(`Historically only setups at ${cal.reliable_threshold}%+ have been profitable — the gate is lifted to match`);
     }
   }
+
+  // --- Environment track record ------------------------------------------
+  // Only acts once the sample in *this* environment is big enough to mean
+  // anything; below that we stay silent rather than reacting to noise.
+  const env = i.environmentTrackRecord;
+  if (env && env.trades >= ENVIRONMENT_MIN_SAMPLE) {
+    if (env.winRate < 40) {
+      uplift += 5;
+      sizeMultiplier *= 0.75;
+      reasons.push(`Only ${env.winRate.toFixed(0)}% of the last ${env.trades} trades in this market environment worked — gate raised and size cut`);
+    } else if (env.winRate < 50) {
+      uplift += 3;
+      sizeMultiplier *= 0.9;
+      reasons.push(`This market environment has a weak ${env.winRate.toFixed(0)}% win rate over ${env.trades} trades — trading it more selectively`);
+    }
+  }
+
 
   uplift = Math.max(0, Math.min(MAX_UPLIFT, Math.round(uplift)));
   sizeMultiplier = tier === "lockdown" ? 0 : Math.max(MIN_MULT, Math.min(1, Number(sizeMultiplier.toFixed(3))));

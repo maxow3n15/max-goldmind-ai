@@ -365,6 +365,8 @@ export type Database = {
           cycle_id: string
           decided_at: string
           direction: string | null
+          environment: string | null
+          environment_confidence: number | null
           id: string
           latency: Json
           news_score: number | null
@@ -385,6 +387,8 @@ export type Database = {
           cycle_id: string
           decided_at?: string
           direction?: string | null
+          environment?: string | null
+          environment_confidence?: number | null
           id?: string
           latency?: Json
           news_score?: number | null
@@ -405,6 +409,8 @@ export type Database = {
           cycle_id?: string
           decided_at?: string
           direction?: string | null
+          environment?: string | null
+          environment_confidence?: number | null
           id?: string
           latency?: Json
           news_score?: number | null
@@ -509,6 +515,7 @@ export type Database = {
           confidence: number | null
           direction: string
           entry_price: number
+          environment: string | null
           excursion_updated_at: string | null
           exit_price: number | null
           id: string
@@ -524,6 +531,7 @@ export type Database = {
           reason_exit: string | null
           risk_reward: number | null
           session: string | null
+          source: string
           status: string
           stop_loss: number
           symbol: string
@@ -540,6 +548,7 @@ export type Database = {
           confidence?: number | null
           direction: string
           entry_price: number
+          environment?: string | null
           excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
@@ -555,6 +564,7 @@ export type Database = {
           reason_exit?: string | null
           risk_reward?: number | null
           session?: string | null
+          source?: string
           status?: string
           stop_loss: number
           symbol?: string
@@ -571,6 +581,7 @@ export type Database = {
           confidence?: number | null
           direction?: string
           entry_price?: number
+          environment?: string | null
           excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
@@ -586,6 +597,7 @@ export type Database = {
           reason_exit?: string | null
           risk_reward?: number | null
           session?: string | null
+          source?: string
           status?: string
           stop_loss?: number
           symbol?: string
@@ -604,6 +616,9 @@ export type Database = {
           cooldown_minutes: number
           created_at: string
           execution_mode: string
+          kill_switch_active: boolean
+          kill_switch_reason: string | null
+          kill_switch_since: string | null
           live_trading_enabled: boolean
           max_correlated_trades: number
           max_daily_loss: number
@@ -631,6 +646,9 @@ export type Database = {
           cooldown_minutes?: number
           created_at?: string
           execution_mode?: string
+          kill_switch_active?: boolean
+          kill_switch_reason?: string | null
+          kill_switch_since?: string | null
           live_trading_enabled?: boolean
           max_correlated_trades?: number
           max_daily_loss?: number
@@ -658,6 +676,9 @@ export type Database = {
           cooldown_minutes?: number
           created_at?: string
           execution_mode?: string
+          kill_switch_active?: boolean
+          kill_switch_reason?: string | null
+          kill_switch_since?: string | null
           live_trading_enabled?: boolean
           max_correlated_trades?: number
           max_daily_loss?: number

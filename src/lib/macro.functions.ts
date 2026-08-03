@@ -131,16 +131,23 @@ async function build(): Promise<MacroReport> {
   };
 }
 
+/**
+ * Server-only macro report builder (cached 5 minutes, shared process-wide).
+ * Used by the server function below and by the scheduled tick.
+ */
+export async function buildMacroReport(): Promise<MacroReport> {
+  if (cache && Date.now() - cache.at < TTL_MS) return cache.report;
+  try {
+    const report = await build();
+    if (!report.degraded) cache = { at: Date.now(), report };
+    return report;
+  } catch (e: any) {
+    return neutral(e?.message ?? "unknown error");
+  }
+}
+
 /** Live macro / news intelligence report (cached 5 minutes, shared server-side). */
 export const getMacroIntel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .handler(async (): Promise<MacroReport> => {
-    if (cache && Date.now() - cache.at < TTL_MS) return cache.report;
-    try {
-      const report = await build();
-      if (!report.degraded) cache = { at: Date.now(), report };
-      return report;
-    } catch (e: any) {
-      return neutral(e?.message ?? "unknown error");
-    }
-  });
+  .handler(async (): Promise<MacroReport> => buildMacroReport());
+

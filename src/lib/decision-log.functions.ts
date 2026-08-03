@@ -18,6 +18,9 @@ const DecisionSchema = z.object({
   spread: z.number().nullable(),
   latency: z.record(z.string(), z.number()).default({}),
   payload: z.record(z.string(), z.unknown()).default({}),
+  /** Market-environment reading for this cycle (see services/environment.ts). */
+  environment: z.string().max(200).nullable().default(null),
+  environmentConfidence: z.number().min(0).max(100).nullable().default(null),
 });
 
 const RecordInput = z.object({ decisions: z.array(DecisionSchema).min(1).max(50) });
@@ -48,7 +51,8 @@ export const recordDecisions = createServerFn({ method: "POST" })
       spread: d.spread,
       latency: d.latency as Record<string, number>,
       payload: d.payload as Record<string, never>,
-
+      environment: d.environment,
+      environment_confidence: d.environmentConfidence,
     }));
 
     const { error } = await context.supabase
