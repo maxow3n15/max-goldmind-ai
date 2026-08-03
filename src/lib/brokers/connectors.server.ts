@@ -315,6 +315,9 @@ const alpacaHeaders = (c: Record<string, string>) => ({
   "Content-Type": "application/json",
 });
 
+const ALPACA_UNSUPPORTED =
+  "Alpaca does not support XAUUSD spot/CFD trading — GLD is a different instrument and cannot be used for this strategy's live execution";
+
 const alpaca: BrokerConnector = {
   id: "alpaca",
   async fetchAccount(c) {
@@ -333,21 +336,10 @@ const alpaca: BrokerConnector = {
       open_positions: Array.isArray(positions) ? positions.length : 0,
     };
   },
-  async placeOrder(c, o) {
-    const base = alpacaBase(c["environment"] ?? "paper");
-    const res = await req(`${base}/v2/orders`, {
-      label: "Alpaca order",
-      method: "POST",
-      headers: alpacaHeaders(c),
-      body: JSON.stringify({
-        symbol: c["symbol"] || "GLD",
-        qty: o.volume,
-        side: o.direction.toLowerCase(),
-        type: "market",
-        time_in_force: "day",
-      }),
-    });
-    return { broker_order_id: String(res.id ?? "") };
+  async placeOrder() {
+    // Alpaca has no XAUUSD spot/CFD instrument. Submitting a GLD (ETF) order
+    // here would give basis-risk exposure that does not track the gold analysis.
+    throw new Error(ALPACA_UNSUPPORTED);
   },
   async closePosition(c, positionId) {
     const base = alpacaBase(c["environment"] ?? "paper");
@@ -377,10 +369,59 @@ const bridgeHeaders = (c: Record<string, string>) => ({
   "Content-Type": "application/json",
 });
 
+/** Validate a user-supplied bridge URL to prevent SSRF against internal hosts. */
+function bridgeBase(c: Record<string, string>): string {
+  const raw = (c["baseUrl"] ?? "").trim();
+  if (!raw) throw new Error("Bridge URL is required");
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("Bridge URL is not a valid URL");
+  }
+
+  if (url.protocol !== "https:") {
+    throw new Error("Bridge URL must use https://");
+  }
+
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  const blockedNames = ["localhost", "0.0.0.0", "::", "::1", "[::1]", "metadata.google.internal"];
+  if (blockedNames.includes(host) || host.endsWith(".localhost") || host.endsWith(".internal") || host.endsWith(".local")) {
+    throw new Error(`Bridge URL host "${url.hostname}" is not allowed (internal address)`);
+  }
+
+  // IPv4 literal checks (loopback, private, link-local).
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    const isPrivate =
+      a === 0 ||
+      a === 127 ||
+      a === 10 ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 169 && b === 254);
+    if (isPrivate) {
+      throw new Error(`Bridge URL host "${url.hostname}" is not allowed (private or loopback address)`);
+    }
+  }
+
+  // IPv6 loopback / unique-local / link-local literals.
+  if (host.includes(":")) {
+    if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80")) {
+      throw new Error(`Bridge URL host "${url.hostname}" is not allowed (private or loopback address)`);
+    }
+  }
+
+  return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
+}
+
 const bridge: BrokerConnector = {
   id: "bridge",
   async fetchAccount(c) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     const a = await req(`${base}/account`, { label: "Bridge account", headers: bridgeHeaders(c) });
     return {
       account_name: a.account_name ?? a.name ?? null,
@@ -395,7 +436,7 @@ const bridge: BrokerConnector = {
     };
   },
   async placeOrder(c, o) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     const res = await req(`${base}/orders`, {
       label: "Bridge order",
       method: "POST",
@@ -405,7 +446,7 @@ const bridge: BrokerConnector = {
     return { broker_order_id: String(res.id ?? res.order_id ?? "") };
   },
   async closePosition(c, positionId) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     await req(`${base}/positions/${positionId}/close`, {
       label: "Bridge close",
       method: "POST",
@@ -413,7 +454,7 @@ const bridge: BrokerConnector = {
     });
   },
   async modifyPosition(c, positionId, patch) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     await req(`${base}/positions/${positionId}`, {
       label: "Bridge modify",
       method: "PATCH",
