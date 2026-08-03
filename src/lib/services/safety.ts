@@ -5,6 +5,7 @@
 import type { CheckResult, ConfluenceReport, SafetyReport } from "./types";
 import type { MarketQuote, ConnectionStatus } from "@/lib/market-data.types";
 import type { CompositeConfidence, MacroReport } from "./macro.types";
+import type { ChallengeStatus } from "@/lib/challenge/engine";
 
 export interface SafetyInput {
   analysis: any | null;
@@ -21,7 +22,10 @@ export interface SafetyInput {
   execConnected: boolean;
   macro?: MacroReport | null;
   composite?: CompositeConfidence | null;
+  /** Funded-account compliance, when a challenge account is being enforced. */
+  challenge?: { enforced: boolean; status: ChallengeStatus | null } | null;
 }
+
 
 const MIN_CONFIDENCE = 76;
 const MIN_RR = 2.0;
@@ -90,7 +94,23 @@ export function runSafety(i: SafetyInput): SafetyReport {
     push("macro_feed_live", "Macro news feed live", false, "not loaded");
   }
 
+  // --- Funded-account challenge compliance ---
+  // Only enforced when the user is actually running a challenge account with
+  // automatic enforcement enabled; otherwise the platform behaves exactly as
+  // it did before.
+  if (i.challenge?.enforced && i.challenge.status) {
+    const cs = i.challenge.status;
+    for (const g of cs.gates) {
+      if (!g.hard && g.passed) continue;      // soft gates only surface when failing
+      push(`challenge_${g.key}`, `Challenge · ${g.label}`, g.passed, g.detail);
+    }
+    push("challenge_budget", "Challenge risk budget available", cs.maxRiskPctForNextTrade > 0,
+      `${cs.maxRiskPctForNextTrade}% of the account still spendable`);
+    push("challenge_posture", "Challenge posture permits trading", cs.posture !== "lockdown", cs.posture);
+  }
+
   const failing = c.filter((x) => !x.passed);
+
   return {
     ok: failing.length === 0,
     checks: c,
