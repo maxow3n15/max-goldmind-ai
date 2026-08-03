@@ -34,6 +34,10 @@ import { buildTradeReport, formatTradeReport } from "@/lib/services/trade-report
 import type { CompositeConfidence, MacroReport } from "@/lib/services/macro.types";
 import type { QuantIntel } from "@/lib/services/quant.types";
 import { buildLadderPlans, createPaperExecutionEngine, createLiveExecutionEngine, MAX_RISK_PER_LEG_PCT } from "@/lib/services/execution";
+import { buildAdaptivePolicy, type AdaptivePolicy } from "@/lib/services/adaptive";
+import { updateExcursion, excursionChanged } from "@/lib/services/forensics";
+import { getForensics, recordExcursions } from "@/lib/forensics.functions";
+import { recordHeartbeat } from "@/lib/heartbeat.functions";
 import { listBrokerConnections, placeLiveOrder, closeLiveOrder, modifyLiveOrder } from "@/lib/brokers.functions";
 import { bus, type DecisionSnapshot } from "@/engines/kernel/event-bus";
 import { metrics } from "@/engines/kernel/metrics";
@@ -226,6 +230,109 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       opened_at: t.opened_at,
     })), [tradeRows]);
 
+  // --- Forensics + calibration: how the engine has actually performed ---
+  const forensicsFn = useServerFn(getForensics);
+  const forensicsQuery = useQuery({
+    queryKey: ["forensics"],
+    queryFn: () => forensicsFn(),
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+
+  // Peak-to-trough drawdown over the realised equity curve.
+  const drawdownPct = useMemo(() => {
+    const closed = tradeRows.filter((t: any) => t.status === "closed" && t.pnl != null)
+      .sort((a: any, b: any) => new Date(a.closed_at).getTime() - new Date(b.closed_at).getTime());
+    const start = Number(snapshot.data?.account?.balance ?? 10000)
+      - closed.reduce((a: number, t: any) => a + Number(t.pnl), 0);
+    let eq = start, peak = start, worst = 0;
+    for (const t of closed) {
+      eq += Number(t.pnl);
+      peak = Math.max(peak, eq);
+      worst = Math.max(worst, peak > 0 ? ((peak - eq) / peak) * 100 : 0);
+    }
+    return Number(worst.toFixed(2));
+  }, [tradeRows, snapshot.data]);
+
+  // --- Adaptive capital preservation ---
+  // Static thresholds treat a healthy account and a wounded one the same.
+  // This layer tightens both size and the confidence bar as the account
+  // comes under pressure, and relaxes back to full allowance once the
+  // engine is calibrated and the drawdown has healed.
+  const adaptive: AdaptivePolicy = useMemo(() => {
+    const s: any = settings.data ?? {};
+    const bal = Number(snapshot.data?.account?.balance ?? 1) || 1;
+    return buildAdaptivePolicy({
+      drawdownPct,
+      maxDrawdownPct: Number(s.max_drawdown_pct ?? 10) || 10,
+      dailyLossPct: -Math.min(0, Number(snapshot.data?.daily_pnl ?? 0)) / bal * 100,
+      maxDailyLossPct: Number(s.max_daily_loss ?? 3) || 3,
+      consecutiveLosses,
+      recentPnl: tradeRows
+        .filter((t: any) => t.status === "closed" && t.pnl != null)
+        .sort((a: any, b: any) => new Date(b.closed_at).getTime() - new Date(a.closed_at).getTime())
+        .slice(0, 10)
+        .map((t: any) => Number(t.pnl)),
+      calibration: forensicsQuery.data?.calibration ?? null,
+      baseThreshold: SAFETY_CONSTANTS.MIN_CONFIDENCE,
+    });
+  }, [drawdownPct, settings.data, snapshot.data, consecutiveLosses, tradeRows, forensicsQuery.data]);
+
+  // --- Excursion tracking: how far every open trade went against us and
+  // in our favour. Recorded on a throttle so the audit trail survives even
+  // if the tab closes mid-trade. ---
+  const recordExcursionsFn = useServerFn(recordExcursions);
+  const excursionRef = useRef<Map<string, { mae: number; mfe: number }>>(new Map());
+  const excursionFlushRef = useRef(0);
+
+  useEffect(() => {
+    const price = market.quote?.mid;
+    if (!price || openTrades.length === 0) return;
+
+    const rows: Array<{ id: string; mae: number; mfe: number; mae_r: number; mfe_r: number }> = [];
+    for (const t of openTrades) {
+      const prev = excursionRef.current.get(t.id) ?? { mae: 0, mfe: 0 };
+      const seen = { direction: t.direction, entry_price: t.entry_price, stop_loss: t.stop_loss, ...prev };
+      const next = updateExcursion(seen, price);
+      if (!next) continue;
+      const moved = excursionChanged(seen, next);
+      excursionRef.current.set(t.id, { mae: next.mae, mfe: next.mfe });
+      if (moved) rows.push({ id: t.id, mae: next.mae, mfe: next.mfe, mae_r: next.mae_r, mfe_r: next.mfe_r });
+    }
+
+    // Persist at most once every 20s — the numbers only ratchet upward, so
+    // a throttled write loses nothing.
+    if (rows.length === 0 || Date.now() - excursionFlushRef.current < 20_000) return;
+    excursionFlushRef.current = Date.now();
+    recordExcursionsFn({ data: { rows: rows.slice(0, 50) } }).catch(() => {});
+  }, [market.quote?.mid, openTrades, recordExcursionsFn]);
+
+  // --- Server-side heartbeat: durable proof the engine is alive ---
+  const heartbeatFn = useServerFn(recordHeartbeat);
+  useEffect(() => {
+    const beat = () => {
+      heartbeatFn({
+        data: {
+          engine: "autopilot",
+          status: killSwitch.active ? "degraded" : running ? "ok" : "down",
+          detail: {
+            running,
+            mode: tradingMode,
+            open_trades: openTrades.length,
+            market: market.status,
+            preservation_tier: adaptive.tier,
+            confidence_gate: adaptive.confidenceThreshold,
+          },
+        },
+      }).catch(() => {});
+    };
+    beat();
+    const t = window.setInterval(beat, 60_000);
+    return () => window.clearInterval(t);
+  }, [heartbeatFn, running, killSwitch.active, tradingMode, openTrades.length, market.status, adaptive.tier, adaptive.confidenceThreshold]);
+
+
+
   // --- Auto kill-switch triggers on data changes ---
   useEffect(() => {
     if (killSwitch.active || !running) return;
@@ -321,11 +428,12 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   useEffect(() => {
     setComposite(computeComposite({
       confluence, analysis, macro, riskScore,
+      finalThreshold: adaptive.confidenceThreshold,
       volume: quant?.volume, volatility: quant?.volatility, momentum: quant?.momentum,
       candleQuality: quant?.candles, correlation: quant?.correlation,
       session: sessionReport,
     }));
-  }, [confluence, analysis, macro, riskScore, quant, sessionReport]);
+  }, [confluence, analysis, macro, riskScore, quant, sessionReport, adaptive.confidenceThreshold]);
 
   // --- Safety recompute whenever any input changes ---
   useEffect(() => {
@@ -423,10 +531,18 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       .filter((t: any) => t != null)
       .map((t: any) => Number(t));
 
+    // Capital preservation is the innermost multiplier: the deeper the
+    // account is into its drawdown allowance — or the more over-optimistic
+    // the confidence engine has proven to be — the smaller every leg gets.
     let riskPctPerLeg = Number((Math.min(
       MAX_RISK_PER_LEG_PCT,
       Number(settings.data?.risk_per_trade ?? MAX_RISK_PER_LEG_PCT),
-    ) * mult).toFixed(3));
+    ) * mult * adaptive.sizeMultiplier).toFixed(3));
+
+    if (adaptive.halted) {
+      log("warn", "Capital preservation lockdown", adaptive.reasons[0]);
+      return;
+    }
 
     // Challenge compliance is the outer envelope: the whole ladder must fit
     // inside the account's remaining margin for error, after its safety
@@ -474,6 +590,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       targets,
       balance,
       riskPctPerLeg,
+      cycleId: cycleRef.current?.id ?? sigKey,
     });
 
 
@@ -523,7 +640,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     })();
   }, [running, killSwitch.active, safety, analysis, market.quote, snapshot.data,
       settings.data, confluence, timeframe, executor, log, qc, openTrades, composite, macro,
-      quant, sessionReport, management, challengeEnforced, challengeStatus, challengeProfile]);
+      quant, sessionReport, management, challengeEnforced, challengeStatus, challengeProfile,
+      adaptive]);
 
 
   // Track rejection reasons for the UI (only when a setup exists and we
@@ -591,6 +709,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     lastRejection, lastPlan, analysing, market, snapshot: snapshot.data,
     settings: settings.data, openTrades, executor,
     consecutiveLosses, todayTradeCount,
+    adaptive, forensics: forensicsQuery.data ?? null,
     start, stop, runAnalysisNow, triggerKillSwitch, resetKillSwitch,
     constants: SAFETY_CONSTANTS,
   };

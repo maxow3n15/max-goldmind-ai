@@ -6,6 +6,7 @@ import { loggingEngine } from "@/engines/logging.engine";
 import type { DecisionSnapshot } from "@/engines/kernel/event-bus";
 import type { LatencyStat } from "@/engines/kernel/metrics";
 import { cn } from "@/lib/utils";
+import { HeartbeatPanel } from "@/components/HeartbeatPanel";
 
 export const Route = createFileRoute("/_authenticated/diagnostics")({
   head: () => ({
@@ -93,6 +94,8 @@ function DiagnosticsPage() {
           <MetricTile icon={Radio} label="Network" value={diag.online ? "Online" : "Offline"} />
           <MetricTile icon={Activity} label="Uptime" value={`${Math.round(diag.uptimeMs / 1000)}s`} />
         </div>
+
+        <HeartbeatPanel />
 
         <section className="glass-panel p-5">
           <h2 className="font-display font-semibold mb-1 flex items-center gap-2">

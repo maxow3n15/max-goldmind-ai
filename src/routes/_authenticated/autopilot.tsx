@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useAutopilotContext } from "@/providers/AutopilotProvider";
+import { TIER_LABEL } from "@/lib/services/adaptive";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
@@ -192,9 +193,38 @@ function Autopilot() {
         </div>
       </div>
 
+      {/* Adaptive capital preservation */}
+      <div className="glass-panel rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-semibold">Capital preservation</h2>
+          <span className="text-xs font-medium px-2 py-1 rounded-full bg-secondary">
+            {TIER_LABEL[a.adaptive.tier]} · {a.adaptive.health}% healthy
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-3 mb-3 text-center">
+          <div className="rounded-xl bg-secondary/40 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Risk allowance</div>
+            <div className="font-mono text-lg">{Math.round(a.adaptive.sizeMultiplier * 100)}%</div>
+          </div>
+          <div className="rounded-xl bg-secondary/40 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Confidence gate</div>
+            <div className="font-mono text-lg">{a.adaptive.confidenceThreshold}%</div>
+          </div>
+          <div className="rounded-xl bg-secondary/40 p-3">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Bar raised by</div>
+            <div className="font-mono text-lg">+{a.adaptive.thresholdUplift}</div>
+          </div>
+        </div>
+        <ul className="space-y-1.5">
+          {a.adaptive.reasons.map((r, i) => (
+            <li key={i} className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-[color:var(--border)]">{r}</li>
+          ))}
+        </ul>
+      </div>
+
       {/* Probability breakdown + quantitative modules */}
       <div className="grid lg:grid-cols-2 gap-4">
-        <ConfidenceBreakdownPanel composite={a.composite} management={a.management} threshold={a.constants.MIN_CONFIDENCE} />
+        <ConfidenceBreakdownPanel composite={a.composite} management={a.management} threshold={a.adaptive.confidenceThreshold} />
 
         <div className="glass-panel rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between">

@@ -15,12 +15,28 @@ const OpenTradeInput = z.object({
   session: z.string().optional(),
   reason_entry: z.string().max(2000).optional(),
   ai_analysis: z.any().optional(),
+  /**
+   * Idempotency key. A retry, a double-click or a re-mounted engine that
+   * replays the same order must never open a second position.
+   */
+  client_order_id: z.string().min(8).max(120).optional(),
 });
 
 export const openPaperTrade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => OpenTradeInput.parse(d))
   .handler(async ({ data, context }) => {
+    // Idempotency: if this exact order was already accepted, return it
+    // rather than opening a duplicate position.
+    if (data.client_order_id) {
+      const { data: existing } = await context.supabase
+        .from("trades").select("*")
+        .eq("user_id", context.userId)
+        .eq("client_order_id", data.client_order_id)
+        .maybeSingle();
+      if (existing) return existing;
+    }
+
     const rr = data.take_profit_1
       ? Math.abs(data.take_profit_1 - data.entry_price) / Math.max(0.01, Math.abs(data.entry_price - data.stop_loss))
       : null;
@@ -40,12 +56,26 @@ export const openPaperTrade = createServerFn({ method: "POST" })
       session: data.session ?? null,
       reason_entry: data.reason_entry ?? null,
       ai_analysis: data.ai_analysis ?? null,
+      client_order_id: data.client_order_id ?? null,
       mode: "paper",
       status: "open",
     }).select().single();
-    if (error) throw new Error(error.message);
+
+    if (error) {
+      // A concurrent submission won the race — return the winner.
+      if (data.client_order_id && /duplicate key|unique/i.test(error.message)) {
+        const { data: existing } = await context.supabase
+          .from("trades").select("*")
+          .eq("user_id", context.userId)
+          .eq("client_order_id", data.client_order_id)
+          .maybeSingle();
+        if (existing) return existing;
+      }
+      throw new Error(error.message);
+    }
     return row;
   });
+
 
 const CloseTradeInput = z.object({
   id: z.string().uuid(),

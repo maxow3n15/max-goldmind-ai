@@ -57,7 +57,15 @@ interface Input {
   session?: SessionReport | null;
   correlation?: CorrelationReport | null;
   candleQuality?: CandleQualityReport | null;
+  /**
+   * Final-confidence gate to apply. The adaptive preservation layer raises
+   * this above the configured floor when the account is under pressure or
+   * the confidence engine has been running over-optimistic. It can never
+   * go below the configured floor.
+   */
+  finalThreshold?: number;
 }
+
 
 /**
  * News score is directional. A 90/100 bullish macro read is only worth 90 to a
@@ -72,7 +80,10 @@ export function directionalNewsScore(macro: MacroReport | null, direction?: "BUY
 export function computeComposite({
   confluence, analysis, macro, riskScore,
   volume, volatility, momentum, session, correlation, candleQuality,
+  finalThreshold,
 }: Input): CompositeConfidence {
+  const gateFinal = Math.max(CONFIDENCE_GATES.FINAL, Math.round(finalThreshold ?? CONFIDENCE_GATES.FINAL));
+
   const setup = analysis?.setup ?? null;
   const direction: "BUY" | "SELL" | null = setup?.direction ?? null;
 
@@ -130,7 +141,7 @@ export function computeComposite({
   );
 
   const gates = [
-    { key: "final", label: `Final confidence ≥ ${CONFIDENCE_GATES.FINAL}%`, passed: final >= CONFIDENCE_GATES.FINAL, detail: `${final}%` },
+    { key: "final", label: `Final confidence ≥ ${gateFinal}%`, passed: final >= gateFinal, detail: gateFinal > CONFIDENCE_GATES.FINAL ? `${final}% · bar raised from ${CONFIDENCE_GATES.FINAL}% by capital preservation` : `${final}%` },
     { key: "technical", label: `Technical ≥ ${CONFIDENCE_GATES.TECHNICAL}%`, passed: technical >= CONFIDENCE_GATES.TECHNICAL, detail: `${technical}%` },
     { key: "news", label: `News / fundamental ≥ ${CONFIDENCE_GATES.NEWS}%`, passed: news >= CONFIDENCE_GATES.NEWS, detail: `${news}%` },
     { key: "rr", label: `Risk / reward ≥ 1:${CONFIDENCE_GATES.MIN_RR}`, passed: rr >= CONFIDENCE_GATES.MIN_RR, detail: rr ? `1:${rr.toFixed(2)}` : "no setup" },
