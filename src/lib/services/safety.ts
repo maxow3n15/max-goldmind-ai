@@ -69,8 +69,11 @@ export function runSafety(i: SafetyInput): SafetyReport {
   push("news_filter", "News filter passed",
     !s.avoid_news || i.analysis?.news_risk !== "high",
     s.avoid_news ? "avoid-news enabled" : "disabled");
+  const preferredSession = s.preferred_session ? String(s.preferred_session).toLowerCase() : "";
+  const sessionContext = i.analysis?.session_context ? String(i.analysis.session_context).toLowerCase() : "";
   push("session_ok", "Trading session allowed",
-    !s.preferred_session || !i.analysis?.session_context || i.analysis.session_context.toLowerCase().includes(String(s.preferred_session).toLowerCase()) || i.analysis.session_context.length > 0);
+    !preferredSession || (sessionContext.length > 0 && sessionContext.includes(preferredSession)),
+    preferredSession ? `preferred ${preferredSession}${sessionContext ? ` / current ${sessionContext}` : " / no session context"}` : "no preference");
 
   // --- Fundamental / news intelligence gates ---
   if (i.composite) {
