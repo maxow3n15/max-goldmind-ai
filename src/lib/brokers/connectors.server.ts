@@ -421,7 +421,7 @@ function bridgeBase(c: Record<string, string>): string {
 const bridge: BrokerConnector = {
   id: "bridge",
   async fetchAccount(c) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     const a = await req(`${base}/account`, { label: "Bridge account", headers: bridgeHeaders(c) });
     return {
       account_name: a.account_name ?? a.name ?? null,
@@ -436,7 +436,7 @@ const bridge: BrokerConnector = {
     };
   },
   async placeOrder(c, o) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     const res = await req(`${base}/orders`, {
       label: "Bridge order",
       method: "POST",
@@ -446,7 +446,7 @@ const bridge: BrokerConnector = {
     return { broker_order_id: String(res.id ?? res.order_id ?? "") };
   },
   async closePosition(c, positionId) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     await req(`${base}/positions/${positionId}/close`, {
       label: "Bridge close",
       method: "POST",
@@ -454,7 +454,7 @@ const bridge: BrokerConnector = {
     });
   },
   async modifyPosition(c, positionId, patch) {
-    const base = (c["baseUrl"] ?? "").replace(/\/$/, "");
+    const base = bridgeBase(c);
     await req(`${base}/positions/${positionId}`, {
       label: "Bridge modify",
       method: "PATCH",
