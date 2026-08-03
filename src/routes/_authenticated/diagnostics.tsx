@@ -6,6 +6,7 @@ import { loggingEngine } from "@/engines/logging.engine";
 import type { DecisionSnapshot } from "@/engines/kernel/event-bus";
 import type { LatencyStat } from "@/engines/kernel/metrics";
 import { cn } from "@/lib/utils";
+import { HeartbeatPanel } from "@/components/HeartbeatPanel";
 
 export const Route = createFileRoute("/_authenticated/diagnostics")({
   head: () => ({

@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listTrades, getAccountSnapshot } from "@/lib/trades.functions";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
+import { ForensicsPanels } from "@/components/ForensicsPanels";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   component: Analytics,
@@ -91,6 +92,8 @@ function Analytics() {
           </div>
         )}
       </div>
+
+      <ForensicsPanels />
     </div>
   );
 }
