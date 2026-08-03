@@ -161,6 +161,9 @@ const LiveOrderInput = z.object({
   session: z.string().optional(),
   reason_entry: z.string().max(2000).optional(),
   ai_analysis: z.any().optional(),
+  /** Who initiated the order. Manual orders skip the AI-specific gates. */
+  source: z.enum(["auto", "manual"]).default("auto"),
+  environment: z.string().max(200).nullable().optional(),
 });
 
 const MAX_SPREAD = 0.8;
@@ -177,22 +180,15 @@ export const placeLiveOrder = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const fail = (reason: string) => ({ ok: false as const, reason });
 
-    const { data: settings } = await context.supabase
-      .from("user_settings")
-      .select("trading_mode, live_trading_enabled")
-      .eq("user_id", context.userId)
-      .maybeSingle();
-    if (!settings?.live_trading_enabled) return fail("Live trading is not authorised in settings.");
-    if (settings?.trading_mode !== "live") return fail("Trading mode is not set to Live.");
-
-    const { data: conn } = await context.supabase
+    const { checkAccountProtection } = await import("@/lib/trades.server");
+    const guard = await checkAccountProtection(context.supabase, context.userId, "live");
+    if (!guard.ok) return fail(guard.reason ?? "Blocked by account protection.");
+    const conn = (await context.supabase
       .from("broker_connections")
       .select("*")
       .eq("user_id", context.userId)
       .eq("is_default", true)
-      .maybeSingle();
-    if (!conn) return fail("No default broker account selected.");
-    if (conn.status !== "connected") return fail(`Broker connection is ${conn.status}. Reconnect required.`);
+      .maybeSingle()).data!;
 
     // --- execution safety gates ---
     if ((data.spread ?? 0) > MAX_SPREAD) return fail(`Spread ${data.spread?.toFixed(2)} above ${MAX_SPREAD} limit.`);
@@ -259,6 +255,8 @@ export const placeLiveOrder = createServerFn({ method: "POST" })
         session: data.session ?? null,
         reason_entry: data.reason_entry ?? null,
         ai_analysis: { ...(data.ai_analysis ?? {}), broker_order_id: brokerOrderId, broker_id: conn.broker_id },
+        source: data.source,
+        environment: data.environment ?? null,
         mode: "live",
         status: "open",
       })

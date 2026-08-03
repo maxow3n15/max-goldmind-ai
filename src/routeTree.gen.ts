@@ -28,6 +28,7 @@ import { Route as AuthenticatedAssistantRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAnalyticsRouteImport } from './routes/_authenticated/analytics'
 import { Route as ApiPublicWebhookTokenRouteImport } from './routes/api/public/webhook/$token'
 import { Route as ApiPublicMarketXauusdRouteImport } from './routes/api/public/market/xauusd'
+import { Route as ApiPublicCronTickRouteImport } from './routes/api/public/cron/tick'
 
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
   id: '/reset-password',
@@ -127,6 +128,11 @@ const ApiPublicMarketXauusdRoute = ApiPublicMarketXauusdRouteImport.update({
   path: '/api/public/market/xauusd',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronTickRoute = ApiPublicCronTickRouteImport.update({
+  id: '/api/public/cron/tick',
+  path: '/api/public/cron/tick',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -145,6 +151,7 @@ export interface FileRoutesByFullPath {
   '/risk': typeof AuthenticatedRiskRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
+  '/api/public/cron/tick': typeof ApiPublicCronTickRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
   '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
@@ -165,6 +172,7 @@ export interface FileRoutesByTo {
   '/risk': typeof AuthenticatedRiskRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/trading-mode': typeof AuthenticatedTradingModeRoute
+  '/api/public/cron/tick': typeof ApiPublicCronTickRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
   '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
@@ -187,6 +195,7 @@ export interface FileRoutesById {
   '/_authenticated/risk': typeof AuthenticatedRiskRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/trading-mode': typeof AuthenticatedTradingModeRoute
+  '/api/public/cron/tick': typeof ApiPublicCronTickRoute
   '/api/public/market/xauusd': typeof ApiPublicMarketXauusdRoute
   '/api/public/webhook/$token': typeof ApiPublicWebhookTokenRoute
 }
@@ -209,6 +218,7 @@ export interface FileRouteTypes {
     | '/risk'
     | '/settings'
     | '/trading-mode'
+    | '/api/public/cron/tick'
     | '/api/public/market/xauusd'
     | '/api/public/webhook/$token'
   fileRoutesByTo: FileRoutesByTo
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/risk'
     | '/settings'
     | '/trading-mode'
+    | '/api/public/cron/tick'
     | '/api/public/market/xauusd'
     | '/api/public/webhook/$token'
   id:
@@ -250,6 +261,7 @@ export interface FileRouteTypes {
     | '/_authenticated/risk'
     | '/_authenticated/settings'
     | '/_authenticated/trading-mode'
+    | '/api/public/cron/tick'
     | '/api/public/market/xauusd'
     | '/api/public/webhook/$token'
   fileRoutesById: FileRoutesById
@@ -259,6 +271,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ApiPublicCronTickRoute: typeof ApiPublicCronTickRoute
   ApiPublicMarketXauusdRoute: typeof ApiPublicMarketXauusdRoute
   ApiPublicWebhookTokenRoute: typeof ApiPublicWebhookTokenRoute
 }
@@ -398,6 +411,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicMarketXauusdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/tick': {
+      id: '/api/public/cron/tick'
+      path: '/api/public/cron/tick'
+      fullPath: '/api/public/cron/tick'
+      preLoaderRoute: typeof ApiPublicCronTickRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -441,6 +461,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ApiPublicCronTickRoute: ApiPublicCronTickRoute,
   ApiPublicMarketXauusdRoute: ApiPublicMarketXauusdRoute,
   ApiPublicWebhookTokenRoute: ApiPublicWebhookTokenRoute,
 }

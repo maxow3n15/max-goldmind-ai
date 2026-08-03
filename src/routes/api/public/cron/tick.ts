@@ -1,0 +1,55 @@
+// Scheduled autopilot tick.
+//
+// Runs the *same* decision pipeline the browser engine runs, once per minute,
+// for every user who has hands-off execution enabled — so trades keep being
+// opened, managed and closed with no tab open.
+//
+// Auth is a shared secret header, mirroring the webhook route: no user session
+// exists when pg_cron calls this.
+
+import { createFileRoute } from "@tanstack/react-router";
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json", "cache-control": "no-store" },
+  });
+}
+
+function sessionNow(): string {
+  const h = new Date().getUTCHours();
+  if (h >= 0 && h < 7) return "Asian";
+  if (h >= 7 && h < 12) return "London";
+  if (h >= 12 && h < 17) return "London/NY";
+  if (h >= 17 && h < 21) return "New York";
+  return "After hours";
+}
+
+export const Route = createFileRoute("/api/public/cron/tick")({
+  server: {
+    handlers: {
+      GET: async () => json({ ok: true, service: "GoldMind AI autopilot tick" }),
+
+      POST: async ({ request }) => {
+        const secret = process.env["CRON_SECRET"];
+        if (!secret) return json({ error: "not configured" }, 503);
+        const provided = request.headers.get("x-cron-secret") ?? "";
+        // Constant-length compare on a short secret; mismatched length fails fast.
+        if (provided.length !== secret.length || provided !== secret) {
+          return json({ error: "unauthorised" }, 401);
+        }
+
+        const { runScheduledTick } = await import("@/lib/services/tick.server");
+        try {
+          const result = await runScheduledTick();
+          return json({ ok: true, ...result });
+        } catch (e: any) {
+          console.error("cron tick failed", e);
+          return json({ ok: false, error: String(e?.message ?? e).slice(0, 300) }, 500);
+        }
+      },
+    },
+  },
+});
+
+void sessionNow;

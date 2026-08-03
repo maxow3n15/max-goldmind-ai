@@ -71,3 +71,45 @@ export const setTradingMode = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+const KillSwitchInput = z.object({
+  active: z.boolean(),
+  reason: z.string().max(300).nullable().optional(),
+});
+
+/**
+ * Durable kill switch. Persisted on `user_settings` so a trip survives a tab
+ * close and is respected by the server-side scheduler as well as the browser
+ * engine — there is only one source of truth.
+ */
+export const setKillSwitch = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => KillSwitchInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("user_settings")
+      .update({
+        kill_switch_active: data.active,
+        kill_switch_reason: data.active ? (data.reason ?? "Manual stop") : null,
+        kill_switch_since: data.active ? new Date().toISOString() : null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+
+const AutoExecuteInput = z.object({ auto_execute: z.boolean() });
+
+/** Hands-off toggle: when true the server-side scheduler runs this user. */
+export const setAutoExecute = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => AutoExecuteInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("user_settings")
+      .update({ auto_execute: data.auto_execute, updated_at: new Date().toISOString() })
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
+

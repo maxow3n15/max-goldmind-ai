@@ -15,6 +15,10 @@ const OpenTradeInput = z.object({
   session: z.string().optional(),
   reason_entry: z.string().max(2000).optional(),
   ai_analysis: z.any().optional(),
+  /** Who initiated the trade: the engine, or the user. */
+  source: z.enum(["auto", "manual"]).default("auto"),
+  /** Market-environment label at open time (services/environment.ts). */
+  environment: z.string().max(200).nullable().optional(),
   /**
    * Idempotency key. A retry, a double-click or a re-mounted engine that
    * replays the same order must never open a second position.
@@ -57,6 +61,8 @@ export const openPaperTrade = createServerFn({ method: "POST" })
       reason_entry: data.reason_entry ?? null,
       ai_analysis: data.ai_analysis ?? null,
       client_order_id: data.client_order_id ?? null,
+      source: data.source,
+      environment: data.environment ?? null,
       mode: "paper",
       status: "open",
     }).select().single();
@@ -77,11 +83,74 @@ export const openPaperTrade = createServerFn({ method: "POST" })
   });
 
 
+
+const ManualTradeInput = z.object({
+  direction: z.enum(["BUY", "SELL"]),
+  entry_price: z.number().positive(),
+  stop_loss: z.number().positive(),
+  take_profit_1: z.number().positive().nullable().optional(),
+  take_profit_2: z.number().positive().nullable().optional(),
+  take_profit_3: z.number().positive().nullable().optional(),
+  lot_size: z.number().min(0.01).max(100),
+  timeframe: z.string().optional(),
+  session: z.string().optional(),
+  note: z.string().max(500).optional(),
+  environment: z.string().max(200).nullable().optional(),
+});
+
+/**
+ * User-initiated paper trade.
+ *
+ * Passes the account-protection checks that apply to any order (kill switch,
+ * max open trades) but skips the AI gates — there is no AI setup behind a
+ * manual entry. Once open it is managed by the position manager exactly like
+ * an autopilot trade; nothing downstream filters on `source`.
+ */
+export const openManualPaperTrade = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ManualTradeInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { checkAccountProtection } = await import("@/lib/trades.server");
+    const guard = await checkAccountProtection(context.supabase, context.userId, "paper");
+    if (!guard.ok) return { ok: false as const, reason: guard.reason ?? "Blocked" };
+
+    const wrongSide =
+      data.direction === "BUY" ? data.stop_loss >= data.entry_price : data.stop_loss <= data.entry_price;
+    if (wrongSide) return { ok: false as const, reason: "Stop loss is on the wrong side of entry." };
+
+    const rr = data.take_profit_1
+      ? Math.abs(data.take_profit_1 - data.entry_price) / Math.max(0.01, Math.abs(data.entry_price - data.stop_loss))
+      : null;
+
+    const { data: row, error } = await context.supabase.from("trades").insert({
+      user_id: context.userId,
+      symbol: "XAUUSD",
+      direction: data.direction,
+      entry_price: data.entry_price,
+      stop_loss: data.stop_loss,
+      take_profit_1: data.take_profit_1 ?? null,
+      take_profit_2: data.take_profit_2 ?? null,
+      take_profit_3: data.take_profit_3 ?? null,
+      lot_size: data.lot_size,
+      risk_reward: rr,
+      timeframe: data.timeframe ?? null,
+      session: data.session ?? null,
+      reason_entry: data.note ? `Manual entry — ${data.note}` : "Manual entry",
+      source: "manual",
+      environment: data.environment ?? null,
+      mode: "paper",
+      status: "open",
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return { ok: true as const, trade: row };
+  });
+
 const CloseTradeInput = z.object({
   id: z.string().uuid(),
   exit_price: z.number().positive(),
   reason_exit: z.string().max(1000).optional(),
 });
+
 
 export const closePaperTrade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
