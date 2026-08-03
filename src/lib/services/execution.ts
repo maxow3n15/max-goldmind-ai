@@ -35,6 +35,7 @@ export function createPaperExecutionEngine(fns: {
           session: plan.session,
           reason_entry: plan.reason,
           ai_analysis: plan.ai_analysis,
+          client_order_id: plan.client_order_id,
         },
       });
       return { id: row.id, broker_id: null };
@@ -111,6 +112,8 @@ export function buildLadderPlans(opts: {
   targets: number[];
   balance: number;
   riskPctPerLeg: number;
+  /** Decision-cycle id; makes each leg's submission idempotent. */
+  cycleId?: string;
 }): TradePlan[] {
   const { base, balance } = opts;
   const riskPct = Math.min(opts.riskPctPerLeg, MAX_RISK_PER_LEG_PCT);
@@ -129,6 +132,7 @@ export function buildLadderPlans(opts: {
     risk_reward: risk > 0 ? +(Math.abs(tp - base.entry) / risk).toFixed(2) : 0,
     lot_size: computeLotSize({ balance, riskPct, entry: base.entry, stop_loss: base.stop_loss }),
     reason: `${base.reason} · TP${idx + 1} leg (${riskPct}% risk)`,
+    client_order_id: opts.cycleId ? `${opts.cycleId}-leg${idx + 1}` : undefined,
   }));
 }
 

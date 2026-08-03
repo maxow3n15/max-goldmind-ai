@@ -420,6 +420,39 @@ export type Database = {
         }
         Relationships: []
       }
+      engine_heartbeats: {
+        Row: {
+          created_at: string
+          detail: Json
+          engine: string
+          id: string
+          last_beat_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json
+          engine: string
+          id?: string
+          last_beat_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          detail?: Json
+          engine?: string
+          id?: string
+          last_beat_at?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       paper_account: {
         Row: {
           balance: number
@@ -471,13 +504,19 @@ export type Database = {
       trades: {
         Row: {
           ai_analysis: Json | null
+          client_order_id: string | null
           closed_at: string | null
           confidence: number | null
           direction: string
           entry_price: number
+          excursion_updated_at: string | null
           exit_price: number | null
           id: string
           lot_size: number
+          mae: number | null
+          mae_r: number | null
+          mfe: number | null
+          mfe_r: number | null
           mode: string
           opened_at: string
           pnl: number | null
@@ -496,13 +535,19 @@ export type Database = {
         }
         Insert: {
           ai_analysis?: Json | null
+          client_order_id?: string | null
           closed_at?: string | null
           confidence?: number | null
           direction: string
           entry_price: number
+          excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
           lot_size?: number
+          mae?: number | null
+          mae_r?: number | null
+          mfe?: number | null
+          mfe_r?: number | null
           mode?: string
           opened_at?: string
           pnl?: number | null
@@ -521,13 +566,19 @@ export type Database = {
         }
         Update: {
           ai_analysis?: Json | null
+          client_order_id?: string | null
           closed_at?: string | null
           confidence?: number | null
           direction?: string
           entry_price?: number
+          excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
           lot_size?: number
+          mae?: number | null
+          mae_r?: number | null
+          mfe?: number | null
+          mfe_r?: number | null
           mode?: string
           opened_at?: string
           pnl?: number | null

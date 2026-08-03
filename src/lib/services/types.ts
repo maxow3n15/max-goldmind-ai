@@ -22,7 +22,14 @@ export interface TradePlan {
   session: string;
   reason: string;
   ai_analysis: unknown;
+  /**
+   * Idempotency key for this exact leg of this exact decision cycle. Any
+   * replay of the same plan must resolve to the same position, never a
+   * second one.
+   */
+  client_order_id?: string;
 }
+
 
 export interface CheckResult {
   key: string;
