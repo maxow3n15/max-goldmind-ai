@@ -8,7 +8,7 @@
 import { analyseSessions } from "./session-stats";
 import { buildCalibration } from "./calibration";
 import { buildManagementPlan } from "./trade-management";
-import { environmentKey } from "./environment";
+import { classifyEnvironment, environmentKey } from "./environment";
 import { planPositionActions, runDecisionPipeline } from "./orchestrator";
 import type { MarketQuote } from "@/lib/market-data.types";
 import type { MacroReport } from "./macro.types";
@@ -155,6 +155,10 @@ export async function runScheduledTick() {
 
       const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
 
+      // Classify first so the environment's own track record can inform the
+      // adaptive policy in the very same cycle.
+      const preEnvKey = environmentKey(classifyEnvironment(quant ?? null, macro));
+
       // ---- Decide -------------------------------------------------------
       const decision = runDecisionPipeline({
         timeframe,
@@ -176,9 +180,7 @@ export async function runScheduledTick() {
         tradingMode,
         challenge,
         calibration,
-        environmentTrackRecord: environmentTrackRecordFor(
-          trades, environmentKey(runEnvKey(decisionEnvPlaceholder())),
-        ),
+        environmentTrackRecord: environmentTrackRecordFor(trades, preEnvKey),
         cycleId,
       });
 
@@ -251,9 +253,6 @@ export async function runScheduledTick() {
 }
 
 /* -------------------------------------------------------------- */
-
-function decisionEnvPlaceholder() { return null; }
-function runEnvKey(_x: unknown) { return null; }
 
 /**
  * The user's realised record in a given environment. Returns null below the
