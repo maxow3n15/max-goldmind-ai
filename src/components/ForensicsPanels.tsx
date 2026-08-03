@@ -20,7 +20,7 @@ export function ForensicsPanels() {
   const c = q.data?.calibration ?? null;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2 items-start">
       {/* ---------------- Excursion forensics ---------------- */}
       <section className="glass-panel rounded-2xl p-5">
         <header className="flex items-baseline justify-between mb-4">
@@ -108,10 +108,11 @@ export function ForensicsPanels() {
                         : `claimed ${fmtNum(b.predicted, 0)}% · delivered ${b.actual != null ? `${fmtNum(b.actual, 0)}%` : "—"} · n=${b.trades}`}
                     </span>
                   </div>
-                  <div className="h-2 bg-secondary rounded-full overflow-hidden flex">
-                    <div className="h-full opacity-40" style={{ width: `${b.predicted}%`, background: "var(--primary)" }} />
+                  {/* Claimed confidence sits behind; realised win rate in front. */}
+                  <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
+                    <div className="absolute inset-y-0 left-0 opacity-30" style={{ width: `${b.predicted}%`, background: "var(--primary)" }} />
                     <div
-                      className="h-full -ml-[100%]"
+                      className="absolute inset-y-0 left-0"
                       style={{
                         width: `${b.actual ?? 0}%`,
                         background: (b.gap ?? 0) > 10 ? "var(--destructive)" : "var(--success)",
