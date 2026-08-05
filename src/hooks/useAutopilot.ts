@@ -451,7 +451,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       for (const [i, plan] of toOpen.entries()) {
         const endExec = metrics.start("execution");
         try {
-          await executor.submit({ ...plan, environment: envKey } as any);
+          await executor.submit({ ...plan, environment: plan.environment ?? envKey });
           const ms = endExec();
           bus.emit("execution:submitted", {
             cycleId, direction: plan.direction, entry: plan.entry,
