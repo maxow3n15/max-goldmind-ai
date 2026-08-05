@@ -103,7 +103,16 @@ function Autopilot() {
         </div>
       </div>
 
+      {/* Manual order ticket — user-initiated entries, managed like any other */}
+      <ManualOrderTicket
+        mode={(a.settings as any)?.trading_mode === "live" ? "live" : "paper"}
+        timeframe={timeframe}
+        price={a.market.quote?.mid ?? null}
+        environment={a.environmentKey}
+      />
+
       {/* Macro & news intelligence */}
+
       <MacroSentimentPanel
         macro={a.macro}
         composite={a.composite}
