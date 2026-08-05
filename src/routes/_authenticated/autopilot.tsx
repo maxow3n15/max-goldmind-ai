@@ -4,6 +4,8 @@ import { TIER_LABEL } from "@/lib/services/adaptive";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
+import { ManualOrderTicket } from "@/components/ManualOrderTicket";
+
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
