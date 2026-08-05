@@ -35,7 +35,9 @@ export function createPaperExecutionEngine(fns: {
           session: plan.session,
           reason_entry: plan.reason,
           ai_analysis: plan.ai_analysis,
+          environment: plan.environment ?? null,
           client_order_id: plan.client_order_id,
+
         },
       });
       return { id: row.id, broker_id: null };
