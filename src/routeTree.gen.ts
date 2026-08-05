@@ -18,6 +18,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedRiskRouteImport } from './routes/_authenticated/risk'
 import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/macro'
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
+import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedChallengeRouteImport } from './routes/_authenticated/challenge'
@@ -75,6 +76,12 @@ const AuthenticatedJournalRoute = AuthenticatedJournalRouteImport.update({
   path: '/journal',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedIntelligenceRoute =
+  AuthenticatedIntelligenceRouteImport.update({
+    id: '/intelligence',
+    path: '/intelligence',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDiagnosticsRoute =
   AuthenticatedDiagnosticsRouteImport.update({
     id: '/diagnostics',
@@ -146,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
   '/risk': typeof AuthenticatedRiskRoute
@@ -167,6 +175,7 @@ export interface FileRoutesByTo {
   '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
   '/risk': typeof AuthenticatedRiskRoute
@@ -190,6 +199,7 @@ export interface FileRoutesById {
   '/_authenticated/challenge': typeof AuthenticatedChallengeRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
   '/_authenticated/macro': typeof AuthenticatedMacroRoute
   '/_authenticated/risk': typeof AuthenticatedRiskRoute
@@ -213,6 +223,7 @@ export interface FileRouteTypes {
     | '/challenge'
     | '/dashboard'
     | '/diagnostics'
+    | '/intelligence'
     | '/journal'
     | '/macro'
     | '/risk'
@@ -234,6 +245,7 @@ export interface FileRouteTypes {
     | '/challenge'
     | '/dashboard'
     | '/diagnostics'
+    | '/intelligence'
     | '/journal'
     | '/macro'
     | '/risk'
@@ -256,6 +268,7 @@ export interface FileRouteTypes {
     | '/_authenticated/challenge'
     | '/_authenticated/dashboard'
     | '/_authenticated/diagnostics'
+    | '/_authenticated/intelligence'
     | '/_authenticated/journal'
     | '/_authenticated/macro'
     | '/_authenticated/risk'
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/journal'
       fullPath: '/journal'
       preLoaderRoute: typeof AuthenticatedJournalRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/intelligence': {
+      id: '/_authenticated/intelligence'
+      path: '/intelligence'
+      fullPath: '/intelligence'
+      preLoaderRoute: typeof AuthenticatedIntelligenceRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/diagnostics': {
@@ -430,6 +450,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChallengeRoute: typeof AuthenticatedChallengeRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
+  AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
   AuthenticatedMacroRoute: typeof AuthenticatedMacroRoute
   AuthenticatedRiskRoute: typeof AuthenticatedRiskRoute
@@ -446,6 +467,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChallengeRoute: AuthenticatedChallengeRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
+  AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,
   AuthenticatedMacroRoute: AuthenticatedMacroRoute,
   AuthenticatedRiskRoute: AuthenticatedRiskRoute,

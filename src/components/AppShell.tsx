@@ -1,5 +1,5 @@
 import { Link, useNavigate, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight, Activity, ShieldCheck, FlaskConical, Trophy } from "lucide-react";
+import { LayoutDashboard, BookOpen, BarChart3, Settings, Sparkles, LogOut, Zap, Bot, Newspaper, Link2, ToggleRight, Activity, ShieldCheck, FlaskConical, Trophy, Brain } from "lucide-react";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -10,6 +10,8 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/autopilot", label: "Autopilot", icon: Bot },
   { to: "/challenge", label: "Challenge", icon: Trophy },
+  { to: "/intelligence", label: "Intelligence", icon: Brain },
+
   { to: "/risk", label: "Risk Engine", icon: ShieldCheck },
   { to: "/backtesting", label: "Backtesting", icon: FlaskConical },
   { to: "/broker-connections", label: "Brokers", icon: Link2 },

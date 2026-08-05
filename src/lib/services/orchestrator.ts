@@ -339,6 +339,8 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     timeframe: i.timeframe,
     session: i.session,
     reason: i.analysis?.explanation ?? "Autopilot",
+    environment: environmentKey(environment),
+
     ai_analysis: {
       ...i.analysis,
       macro: i.macro,

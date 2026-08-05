@@ -27,8 +27,12 @@ export interface DecisionSnapshot {
   price: number | null;
   spread: number | null;
   latency: Record<string, number>;
+  /** Market-environment label for this cycle (services/environment.ts). */
+  environment?: string | null;
+  environmentConfidence?: number | null;
   payload: Record<string, unknown>;
 }
+
 
 export interface EngineEventMap {
   "market:tick": { quote: MarketQuote; latencyMs: number | null };

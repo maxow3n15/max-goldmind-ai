@@ -4,6 +4,8 @@ import { TIER_LABEL } from "@/lib/services/adaptive";
 import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
+import { ManualOrderTicket } from "@/components/ManualOrderTicket";
+
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
@@ -103,7 +105,16 @@ function Autopilot() {
         </div>
       </div>
 
+      {/* Manual order ticket — user-initiated entries, managed like any other */}
+      <ManualOrderTicket
+        mode={(a.settings as any)?.trading_mode === "live" ? "live" : "paper"}
+        timeframe={timeframe}
+        price={a.market.quote?.mid ?? null}
+        environment={a.environmentKey}
+      />
+
       {/* Macro & news intelligence */}
+
       <MacroSentimentPanel
         macro={a.macro}
         composite={a.composite}
