@@ -2,6 +2,7 @@
 // server function and the scheduled tick share one prompt and one parser.
 
 import { callChat } from "./ai-gateway.server";
+import { newTelemetry, recordAiHealth } from "./ai-health.server";
 import { clampConfidence, validateSetup } from "./services/setup-validation";
 
 export const ANALYSIS_SYSTEM_PROMPT = `You are GoldMind AI, a senior XAUUSD (Gold) analyst trained in Smart Money / ICT concepts.
