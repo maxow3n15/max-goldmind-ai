@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat } from "./ai-gateway.server";
+import { newTelemetry, recordAiHealth } from "./ai-health.server";
 
 const AnalyzeInput = z.object({
   timeframe: z.enum(["1", "5", "15", "30", "60", "240", "D"]),
@@ -18,6 +19,8 @@ export const analyzeMarket = createServerFn({ method: "POST" })
       timeframe: data.timeframe,
       price: data.price,
       session: data.session,
+      userId: context.userId,
+      source: "analysis",
     });
 
     const { error } = await context.supabase.from("ai_analyses").insert({
@@ -66,14 +69,31 @@ export const askAssistant = createServerFn({ method: "POST" })
       user_id: context.userId, role: "user", content: data.message,
     });
 
-    const reply = await callChat({
+    const telemetry = newTelemetry();
+    let reply: string;
+    try {
+      reply = await callChat({
       messages: [
         { role: "system", content: `You are GoldMind AI, an expert XAUUSD trading mentor using ICT / Smart Money Concepts. Explain clearly and honestly. Never promise profits. Use plain English. Reference this context when relevant: ${analysisCtx}` },
         ...((history ?? []) as ChatMessage[]),
         { role: "user", content: data.message },
       ],
       temperature: 0.6,
-    });
+      }, telemetry);
+    } catch (e: any) {
+      const status = telemetry.timeouts > 0
+        ? "timeout"
+        : telemetry.rateLimits > 0
+          ? "rate_limited"
+          : telemetry.emptyResponses > 0
+            ? "empty_response"
+            : telemetry.upstreamErrors > 0
+              ? "upstream_error"
+              : "error";
+      await recordAiHealth({ userId: context.userId, source: "assistant", status, telemetry, error: e?.message });
+      throw e;
+    }
+    await recordAiHealth({ userId: context.userId, source: "assistant", status: "ok", telemetry });
 
     await context.supabase.from("chat_messages").insert({
       user_id: context.userId, role: "assistant", content: reply,

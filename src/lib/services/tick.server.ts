@@ -103,7 +103,7 @@ export async function runScheduledTick() {
         } else {
           const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
           try {
-            analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session });
+            analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session, userId, source: "tick" });
           } catch {
             analysis = null;
           }
