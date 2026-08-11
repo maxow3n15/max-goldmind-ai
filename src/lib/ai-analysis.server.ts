@@ -61,12 +61,19 @@ export async function runMarketAnalysis(opts: {
   timeframe: string;
   price?: number;
   session?: string;
+  /** When present, every call outcome is logged to the AI health panel. */
+  userId?: string | null;
+  source?: string;
 }): Promise<any> {
+  const telemetry = newTelemetry();
+  const source = opts.source ?? "analysis";
   const price = Number(opts.price);
   // Never invent a price: analysing gold against a placeholder produces
   // confident, untradeable levels — the most expensive failure mode here.
   if (!Number.isFinite(price) || price <= 0) {
-    throw new Error("No live XAUUSD price available — analysis skipped rather than run on a stale price.");
+    const msg = "No live XAUUSD price available — analysis skipped rather than run on a stale price.";
+    await recordAiHealth({ userId: opts.userId, source, status: "no_price", telemetry, error: msg });
+    throw new Error(msg);
   }
 
   const user = `Analyze XAUUSD right now on the ${opts.timeframe} timeframe.
@@ -75,16 +82,38 @@ Current session: ${opts.session ?? "unknown"}.
 Consider higher-timeframe context (4H / Daily) as well as the requested timeframe.
 Return JSON only.`;
 
-  const raw = await callChat({
-    messages: [
-      { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
-      { role: "user", content: user },
-    ],
-    response_format: { type: "json_object" },
-    temperature: 0.3,
-  });
+  let raw: string;
+  try {
+    raw = await callChat({
+      messages: [
+        { role: "system", content: ANALYSIS_SYSTEM_PROMPT },
+        { role: "user", content: user },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.3,
+    }, telemetry);
+  } catch (e: any) {
+    const status = telemetry.timeouts > 0
+      ? "timeout"
+      : telemetry.rateLimits > 0
+        ? "rate_limited"
+        : telemetry.emptyResponses > 0
+          ? "empty_response"
+          : telemetry.upstreamErrors > 0
+            ? "upstream_error"
+            : "error";
+    await recordAiHealth({ userId: opts.userId, source, status, telemetry, error: e?.message });
+    throw e;
+  }
 
-  const parsed = parseJsonObject(raw);
+  let parsed: any;
+  try {
+    parsed = parseJsonObject(raw);
+  } catch (e: any) {
+    telemetry.parseErrors += 1;
+    await recordAiHealth({ userId: opts.userId, source, status: "parse_error", telemetry, error: e?.message });
+    throw e;
+  }
 
   // Sanitise before anything sizes a position off these numbers.
   const { setup, rejections } = validateSetup(parsed?.setup, price);
@@ -95,7 +124,17 @@ Return JSON only.`;
   if (rejections.length > 0) {
     parsed.setup_rejections = rejections;
     parsed.explanation = `${parsed.explanation ?? ""} ${rejections[0]}`.trim();
+    telemetry.validationRejects = rejections.length;
+    telemetry.rejectionReasons = rejections;
   }
+
+  await recordAiHealth({
+    userId: opts.userId,
+    source,
+    status: rejections.length > 0 ? "validation_reject" : "ok",
+    telemetry,
+  });
 
   return parsed;
 }
+
