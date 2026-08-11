@@ -7,6 +7,7 @@ import type { DecisionSnapshot } from "@/engines/kernel/event-bus";
 import type { LatencyStat } from "@/engines/kernel/metrics";
 import { cn } from "@/lib/utils";
 import { HeartbeatPanel } from "@/components/HeartbeatPanel";
+import { AiHealthPanel } from "@/components/AiHealthPanel";
 
 export const Route = createFileRoute("/_authenticated/diagnostics")({
   head: () => ({
@@ -96,6 +97,8 @@ function DiagnosticsPage() {
         </div>
 
         <HeartbeatPanel />
+
+        <AiHealthPanel />
 
         <section className="glass-panel p-5">
           <h2 className="font-display font-semibold mb-1 flex items-center gap-2">
