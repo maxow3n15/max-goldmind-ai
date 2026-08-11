@@ -50,6 +50,66 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_health_events: {
+        Row: {
+          attempts: number
+          created_at: string
+          empty_responses: number
+          error: string | null
+          http_status: number | null
+          id: string
+          latency_ms: number | null
+          model: string | null
+          parse_errors: number
+          rate_limits: number
+          rejection_reasons: Json
+          source: string
+          status: string
+          timeouts: number
+          upstream_errors: number
+          user_id: string
+          validation_rejects: number
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          empty_responses?: number
+          error?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          parse_errors?: number
+          rate_limits?: number
+          rejection_reasons?: Json
+          source?: string
+          status: string
+          timeouts?: number
+          upstream_errors?: number
+          user_id: string
+          validation_rejects?: number
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          empty_responses?: number
+          error?: string | null
+          http_status?: number | null
+          id?: string
+          latency_ms?: number | null
+          model?: string | null
+          parse_errors?: number
+          rate_limits?: number
+          rejection_reasons?: Json
+          source?: string
+          status?: string
+          timeouts?: number
+          upstream_errors?: number
+          user_id?: string
+          validation_rejects?: number
+        }
+        Relationships: []
+      }
       backtest_runs: {
         Row: {
           bars: number
