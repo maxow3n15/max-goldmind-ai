@@ -96,14 +96,21 @@ export async function runScheduledTick() {
 
       let analysis = analysisCache.get(timeframe);
       if (analysis === undefined) {
-        const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
-        try {
-          analysis = await runMarketAnalysis({ timeframe, price: quote?.mid, session });
-        } catch {
+        // No live quote means no trustworthy reference price: skip the AI call
+        // entirely rather than analysing gold against nothing.
+        if (!quote?.mid) {
           analysis = null;
+        } else {
+          const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
+          try {
+            analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session });
+          } catch {
+            analysis = null;
+          }
         }
         analysisCache.set(timeframe, analysis);
       }
+
 
       const [{ data: tradeRows }, { data: acct }] = await Promise.all([
         supabaseAdmin.from("trades").select("*").eq("user_id", userId)
