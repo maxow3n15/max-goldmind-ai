@@ -34,10 +34,14 @@ export const Route = createFileRoute("/api/public/cron/tick")({
         const secret = process.env["CRON_SECRET"];
         if (!secret) return json({ error: "not configured" }, 503);
         const provided = request.headers.get("x-cron-secret") ?? "";
-        // Constant-length compare on a short secret; mismatched length fails fast.
-        if (provided.length !== secret.length || provided !== secret) {
+        // Timing-safe: compare digests so neither length nor content leaks.
+        const { createHash, timingSafeEqual } = await import("crypto");
+        const a = createHash("sha256").update(provided).digest();
+        const b = createHash("sha256").update(secret).digest();
+        if (!timingSafeEqual(a, b)) {
           return json({ error: "unauthorised" }, 401);
         }
+
 
         const { runScheduledTick } = await import("@/lib/services/tick.server");
         try {
