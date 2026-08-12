@@ -15,7 +15,7 @@ import type { CompositeConfidence, MacroReport } from "./macro.types";
 import type { CorrelationReport, MomentumReport, SessionReport, VolatilityReport, VolumeReport, CandleQualityReport } from "./quant.types";
 
 export const CONFIDENCE_GATES = {
-  FINAL: 76,
+  FINAL: 88,
   TECHNICAL: 80,
   NEWS: 75,
   MIN_RR: 2,

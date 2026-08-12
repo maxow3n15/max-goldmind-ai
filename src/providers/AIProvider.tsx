@@ -9,7 +9,7 @@ import { useNotifications } from "./NotificationProvider";
 import type { AIAnalysis } from "@/types/platform";
 import type { ConfluenceReport } from "@/lib/services/types";
 
-export const AI_CONFIDENCE_THRESHOLD = 76;
+export const AI_CONFIDENCE_THRESHOLD = 88;
 
 interface AIContextValue {
   analysis: AIAnalysis | null;

@@ -13,7 +13,7 @@ const RunInput = z.object({
   riskPerTradePct: z.number().min(0.1).max(2).default(0.5),
   rrTarget: z.number().min(1).max(6).default(2),
   atrStopMultiple: z.number().min(0.5).max(5).default(1.5),
-  minConfidence: z.number().min(50).max(99).default(76),
+  minConfidence: z.number().min(50).max(99).default(88),
   costPerTrade: z.number().min(0).max(5).default(0.35),
   useTrailingStop: z.boolean().default(true),
   londonNyOnly: z.boolean().default(true),
