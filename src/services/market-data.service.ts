@@ -36,6 +36,7 @@ function mockQuote(prev: MarketQuote | null): MarketQuote {
     mid,
     timestamp: Date.now(),
     source: "Simulated feed (backend unavailable)",
+    simulated: true,
   };
 }
 
