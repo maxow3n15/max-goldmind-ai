@@ -30,7 +30,7 @@ export const DEFAULT_BACKTEST_CONFIG: Omit<BacktestConfig, "limits"> = {
   sessions: [{ from: 7, to: 16 }],
   useTrailingStop: true,
   breakEvenAtR: 1,
-  minConfidence: 76,
+  minConfidence: 88,
 };
 
 export interface SimTrade {

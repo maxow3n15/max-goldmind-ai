@@ -1,6 +1,6 @@
 // Adaptive capital preservation.
 //
-// The static gates never change with circumstance: a 76% threshold means
+// The static gates never change with circumstance: an 88% threshold means
 // the same thing on day one of a clean account as it does halfway into a
 // drawdown. This layer makes preservation respond to the state the account
 // is actually in — deeper drawdown tightens both the confidence bar and the
@@ -25,7 +25,7 @@ export interface AdaptiveInput {
   /** Realised P&L of the most recent closed trades, newest first. */
   recentPnl: number[];
   calibration: CalibrationReport | null;
-  /** Base confidence gate before adaptation (76 by default). */
+  /** Base confidence gate before adaptation (88 by default). */
   baseThreshold: number;
   /**
    * The user's own historical record in the market environment classified

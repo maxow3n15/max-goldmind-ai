@@ -47,7 +47,7 @@ function BacktestingPage() {
   const [riskPerTradePct, setRisk] = useState(0.5);
   const [rrTarget, setRr] = useState(2);
   const [atrStopMultiple, setAtrMult] = useState(1.5);
-  const [minConfidence, setMinConfidence] = useState(76);
+  const [minConfidence, setMinConfidence] = useState(88);
   const [costPerTrade, setCost] = useState(0.35);
   const [useTrailingStop, setTrail] = useState(true);
   const [londonNyOnly, setSessions] = useState(true);
