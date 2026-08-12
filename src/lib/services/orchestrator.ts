@@ -21,6 +21,10 @@ import { classifyEnvironment, environmentKey, type EnvironmentReading } from "./
 import { buildLadderPlans, MAX_RISK_PER_LEG_PCT } from "./execution";
 import { evaluate as evaluatePosition, type ManagementAction, type OpenTrade } from "./position-manager";
 import { runSafety, SAFETY_CONSTANTS } from "./safety";
+import { classifyDataQuality, type DataQuality } from "./data-quality";
+import { computeStructuredConfidence, type StructuredConfidence, type FactorKey } from "./confidence-engine";
+import type { MultiTimeframeReport } from "./mtf";
+import type { StructureRead } from "./structure";
 import { computeComposite, sizeMultiplier } from "./scoring";
 
 /* ------------------------------------------------------------------ */
@@ -175,6 +179,12 @@ export interface OrchestratorInput {
   environmentTrackRecord?: { winRate: number; trades: number } | null;
   /** Idempotency root for this decision cycle. */
   cycleId: string;
+  /** Deterministic multi-timeframe read; null when candles were unavailable. */
+  mtf?: MultiTimeframeReport | null;
+  /** Structure on the trading timeframe, used for entry-quality scoring. */
+  entryStructure?: StructureRead | null;
+  /** Per-user confidence factor weights. */
+  confidenceWeights?: Partial<Record<FactorKey, number>> | null;
 }
 
 export type OrchestratorAction = "open" | "reject" | "halt";
@@ -196,6 +206,9 @@ export interface OrchestratorDecision {
   killSwitchTrip: string | null;
   /** Deduplication key for the current setup snapshot. */
   setupKey: string | null;
+  /** Auditable factor-by-factor confidence. */
+  structured: StructuredConfidence | null;
+  dataQuality: DataQuality;
 }
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
@@ -226,8 +239,42 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     environmentTrackRecord: i.environmentTrackRecord ?? null,
   });
 
+  const dataQuality = classifyDataQuality(i.quote, i.connection);
+
+  const setupForConfidence = i.analysis?.setup ?? null;
+  const structured = computeStructuredConfidence({
+    setup: setupForConfidence,
+    mtf: i.mtf ?? null,
+    entryStructure: i.entryStructure ?? null,
+    macro: i.macro,
+    momentum: i.quant?.momentum ?? null,
+    volatility: i.quant?.volatility ?? null,
+    volume: i.quant?.volume ?? null,
+    correlation: i.quant?.correlation ?? null,
+    session: i.sessionReport ?? null,
+    dataQuality,
+    spread: i.quote?.spread ?? null,
+    maxSpread: Number(s.max_spread ?? SAFETY_CONSTANTS.MAX_SPREAD) || SAFETY_CONSTANTS.MAX_SPREAD,
+    minRr: Math.max(SAFETY_CONSTANTS.MIN_RR, Number(s.min_risk_reward ?? SAFETY_CONSTANTS.MIN_RR) || SAFETY_CONSTANTS.MIN_RR),
+    weights: i.confidenceWeights ?? undefined,
+  });
+
+  // The deterministic score replaces whatever number the model reported.
+  const structuredConfluence: ConfluenceReport = {
+    score: structured.score,
+    supporting: structured.supporting,
+    detracting: structured.detracting,
+    breakdown: structured.factors.map((f) => ({
+      key: f.key,
+      label: f.label,
+      passed: f.verdict === "pass",
+      detail: f.detail,
+      weight: f.weight,
+    })),
+  };
+
   const composite = computeComposite({
-    confluence: i.confluence,
+    confluence: structuredConfluence,
     analysis: i.analysis,
     macro: i.macro,
     riskScore,
@@ -242,7 +289,10 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
 
   const safety = runSafety({
     analysis: i.analysis,
-    confluence: i.confluence,
+    confluence: structuredConfluence,
+    dataQuality,
+    structuredConfidence: structured.score,
+    mtfAlignment: i.mtf?.alignment ?? null,
     quote: i.quote,
     connection: i.connection,
     settings: i.settings,
@@ -286,6 +336,8 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     rejection: safety.ok ? null : safety.failingReasons[0] ?? null,
     killSwitchTrip,
     setupKey,
+    structured,
+    dataQuality,
   };
 
   // ---- Gates before sizing ---------------------------------------------
@@ -335,7 +387,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     stop_loss: Number(setup.stop_loss),
     take_profit_2: null,
     take_profit_3: null,
-    confidence: Number(composite?.final ?? i.confluence?.score ?? i.analysis?.confidence ?? 0),
+    confidence: Number(composite?.final ?? structured.score),
     timeframe: i.timeframe,
     session: i.session,
     reason: i.analysis?.explanation ?? "Autopilot",
