@@ -9,9 +9,16 @@ export interface MarketQuote {
   ask: number;
   spread: number;      // ask - bid
   mid: number;         // (ask + bid) / 2
-  timestamp: number;   // epoch ms of last price update
+  timestamp: number;   // epoch ms (UTC) of last price update
   source: string;      // human label for the data provider
+  /**
+   * True when the quote was generated locally because no real feed was
+   * reachable. Never set by a production feed; every trading path must
+   * refuse to act on a simulated quote.
+   */
+  simulated?: boolean;
 }
+
 
 export interface MarketDataEnvelope {
   ok: boolean;
