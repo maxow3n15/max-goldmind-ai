@@ -41,6 +41,25 @@ export const openPaperTrade = createServerFn({ method: "POST" })
       if (existing) return existing;
     }
 
+    // Server is authoritative: re-derive the gates from the order plus a fresh
+    // server-side price. The caller's own verdict is never trusted.
+    const { checkAccountProtection } = await import("@/lib/trades.server");
+    const guard = await checkAccountProtection(context.supabase, context.userId, "paper");
+    if (!guard.ok) throw new Error(guard.reason ?? "Blocked by account protection");
+
+    const { revalidateOrder } = await import("@/lib/services/execution-guard.server");
+    const revalidation = await revalidateOrder(
+      {
+        direction: data.direction,
+        entry_price: data.entry_price,
+        stop_loss: data.stop_loss,
+        take_profit_1: data.take_profit_1 ?? null,
+        confidence: data.confidence ?? null,
+      },
+      guard.settings,
+    );
+    if (!revalidation.ok) throw new Error(`Execution refused — ${revalidation.reason}`);
+
     const rr = data.take_profit_1
       ? Math.abs(data.take_profit_1 - data.entry_price) / Math.max(0.01, Math.abs(data.entry_price - data.stop_loss))
       : null;

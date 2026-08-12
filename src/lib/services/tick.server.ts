@@ -10,7 +10,7 @@ import { buildCalibration } from "./calibration";
 import { buildManagementPlan } from "./trade-management";
 import { classifyEnvironment, environmentKey } from "./environment";
 import { planPositionActions, runDecisionPipeline } from "./orchestrator";
-import type { MarketQuote } from "@/lib/market-data.types";
+import { fetchSpotQuote } from "./spot.server";
 import type { MacroReport } from "./macro.types";
 import type { QuantIntel } from "./quant.types";
 
@@ -25,30 +25,6 @@ function sessionNow(): string {
   return "After hours";
 }
 
-async function fetchQuote(): Promise<MarketQuote | null> {
-  try {
-    const res = await fetch("https://api.gold-api.com/price/XAU", {
-      headers: { accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const j: any = await res.json();
-    const mid = Number(j.price);
-    if (!Number.isFinite(mid)) return null;
-    const bid = +(mid - 0.15).toFixed(2);
-    const ask = +(mid + 0.15).toFixed(2);
-    return {
-      symbol: "XAUUSD",
-      bid,
-      ask,
-      spread: +(ask - bid).toFixed(3),
-      mid: +mid.toFixed(3),
-      timestamp: Date.now(),
-      source: "gold-api.com (public spot)",
-    };
-  } catch {
-    return null;
-  }
-}
 
 export async function runScheduledTick() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -63,7 +39,7 @@ export async function runScheduledTick() {
   const enabled = users ?? [];
   if (enabled.length === 0) return { users: 0, opened: 0, managed: 0 };
 
-  const quote = await fetchQuote();
+  const quote = await fetchSpotQuote();
 
   // Macro and quant are market-wide: computed once, shared by every user.
   const { buildMacroReport } = await import("@/lib/macro.functions");
