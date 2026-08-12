@@ -398,6 +398,11 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
       macro: i.macro,
       composite,
       quant: i.quant,
+      structured_confidence: structured,
+      mtf: i.mtf
+        ? { verdict: i.mtf.verdict, score: i.mtf.score, alignment: i.mtf.alignment, htf: i.mtf.htf, mtf: i.mtf.mtf, ltf: i.mtf.ltf }
+        : null,
+      data_quality: dataQuality,
       session_stats: i.sessionReport,
       management: i.management,
       environment,
