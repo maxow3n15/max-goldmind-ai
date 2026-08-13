@@ -11,10 +11,19 @@ import { buildManagementPlan } from "./trade-management";
 import { classifyEnvironment, environmentKey } from "./environment";
 import { planPositionActions, runDecisionPipeline } from "./orchestrator";
 import { fetchSpotQuote } from "./spot.server";
+import { marketStateHash, StateCache } from "./market-state";
+import type { MarketStructureBundle } from "@/lib/mtf.server";
 import type { MacroReport } from "./macro.types";
 import type { QuantIntel } from "./quant.types";
 
 const MAX_USERS_PER_TICK = 50;
+
+/**
+ * AI analyses keyed by market-state hash. The market usually has not changed
+ * meaningfully between one-minute ticks; re-running the model on an identical
+ * state buys nothing and costs latency and quota.
+ */
+const analysisByState = new StateCache<any>(10 * 60_000, 32);
 
 function sessionNow(): string {
   const h = new Date().getUTCHours();
@@ -50,6 +59,7 @@ export async function runScheduledTick() {
 
   const quantCache = new Map<string, QuantIntel | null>();
   const analysisCache = new Map<string, any>();
+  const structureCache = new Map<string, MarketStructureBundle | null>();
   const session = sessionNow();
 
   let opened = 0;
@@ -70,18 +80,45 @@ export async function runScheduledTick() {
         quantCache.set(timeframe, quant);
       }
 
+      // Structure is what the safety engine's timeframe-agreement gate reads.
+      // Without it every automated decision fails that gate by construction.
+      let structure = structureCache.get(timeframe);
+      if (structure === undefined) {
+        const { buildMarketStructure } = await import("@/lib/mtf.server");
+        try { structure = await buildMarketStructure(timeframe); }
+        catch { structure = null; }
+        structureCache.set(timeframe, structure);
+      }
+
+      // A structurally unusable candle feed is not a trading condition.
+      const feedBroken = structure?.integrity.status === "INVALID";
+
       let analysis = analysisCache.get(timeframe);
       if (analysis === undefined) {
         // No live quote means no trustworthy reference price: skip the AI call
         // entirely rather than analysing gold against nothing.
-        if (!quote?.mid) {
+        if (!quote?.mid || feedBroken) {
           analysis = null;
         } else {
-          const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
-          try {
-            analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session, userId, source: "tick" });
-          } catch {
-            analysis = null;
+          const stateKey = marketStateHash({
+            timeframe,
+            lastCandleAt: structure?.lastCandleAt ?? null,
+            price: quote.mid,
+            mtf: structure?.mtf ?? null,
+            macro,
+            session,
+          });
+          const cached = analysisByState.get(stateKey);
+          if (cached !== undefined) {
+            analysis = cached;
+          } else {
+            const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
+            try {
+              analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session, userId, source: "tick" });
+              if (analysis) analysisByState.set(stateKey, analysis);
+            } catch {
+              analysis = null;
+            }
           }
         }
         analysisCache.set(timeframe, analysis);
@@ -148,6 +185,8 @@ export async function runScheduledTick() {
         session,
         analysis,
         confluence: null,
+        mtf: structure?.mtf ?? null,
+        entryStructure: structure?.entryStructure ?? null,
         macro,
         quant: quant ?? null,
         sessionReport,
@@ -199,7 +238,7 @@ export async function runScheduledTick() {
       }
 
       // ---- Open new legs --------------------------------------------------
-      if (decision.action === "open" && !decision.killSwitchTrip) {
+      if (decision.action === "open" && !decision.killSwitchTrip && !feedBroken) {
         for (const plan of decision.plans) {
           const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey);
           if (inserted) opened += 1;
@@ -219,11 +258,19 @@ export async function runScheduledTick() {
         technical_score: decision.composite?.technical ?? null,
         news_score: decision.composite?.news ?? null,
         reasoning: decision.adaptive.reasons.slice(0, 20),
-        blockers: decision.safety.failingReasons.slice(0, 20),
+        blockers: [
+          ...decision.safety.failingReasons,
+          ...(feedBroken ? [`Candle feed unusable: ${structure?.integrity.issues[0] ?? "insufficient data"}`] : []),
+        ].slice(0, 20),
         price: quote?.mid ?? null,
         spread: quote?.spread ?? null,
         latency: {},
-        payload: { source: "cron", tier: decision.adaptive.tier },
+        payload: {
+          source: "cron",
+          tier: decision.adaptive.tier,
+          feed_integrity: structure?.integrity.status ?? "UNKNOWN",
+          feed_issues: structure?.integrity.issues.slice(0, 4) ?? [],
+        },
         environment: envKey,
         environment_confidence: decision.environment.regime_confidence,
       }, { onConflict: "user_id,cycle_id", ignoreDuplicates: true });
