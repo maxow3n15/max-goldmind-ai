@@ -24,6 +24,10 @@ export interface TradePlan {
   ai_analysis: unknown;
   /** Market-environment label at decision time (services/environment.ts). */
   environment?: string | null;
+  /** When the setup was generated, UTC ms. */
+  issued_at?: number;
+  /** Hard expiry: nothing may execute this plan afterwards. */
+  expires_at?: number;
 
   /**
    * Idempotency key for this exact leg of this exact decision cycle. Any

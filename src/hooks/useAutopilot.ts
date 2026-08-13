@@ -37,6 +37,7 @@ import type { QuantIntel } from "@/lib/services/quant.types";
 import { createPaperExecutionEngine, createLiveExecutionEngine } from "@/lib/services/execution";
 import { classifyEnvironment, environmentKey } from "@/lib/services/environment";
 import { runDecisionPipeline, planPositionActions } from "@/lib/services/orchestrator";
+import { getMarketStructure } from "@/lib/structure.functions";
 import { updateExcursion, excursionChanged } from "@/lib/services/forensics";
 import { getForensics, recordExcursions } from "@/lib/forensics.functions";
 import { recordHeartbeat } from "@/lib/heartbeat.functions";
@@ -221,6 +222,19 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     staleTime: 240_000,
   });
 
+  // --- Multi-timeframe structure ----------------------------------------
+  // The browser engine reasons about exactly the structure the server tick
+  // does; without it the timeframe-agreement gate can never pass.
+  const structureFn = useServerFn(getMarketStructure);
+  const structureQuery = useQuery({
+    queryKey: ["market-structure", timeframe],
+    queryFn: () => structureFn({ data: { timeframe } }),
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+  const structure = (structureQuery.data as any) ?? null;
+  const feedBroken = structure?.integrity?.status === "INVALID";
+
   const environment = useMemo(() => classifyEnvironment(quant, macro), [quant, macro]);
   const envKey = useMemo(() => environmentKey(environment), [environment]);
 
@@ -239,6 +253,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
         session: currentSession(),
         analysis,
         confluence,
+        mtf: structure?.mtf ?? null,
+        entryStructure: structure?.entryStructure ?? null,
         macro,
         quant,
         sessionReport,
@@ -257,7 +273,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
         environmentTrackRecord,
         cycleId: cycleRef.current?.id ?? "cycle",
       }),
-    [timeframe, analysis, confluence, macro, quant, sessionReport, management, market.quote, market.status,
+    [timeframe, analysis, confluence, macro, quant, structure, sessionReport, management, market.quote, market.status,
      settingsRow, snapshot.data, tradeRows, killSwitch, running, executor.connected, tradingMode,
      challengeEnforced, challengeStatus, challengeProfile, forensicsQuery.data, environmentTrackRecord],
   );
@@ -430,6 +446,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   useEffect(() => {
     if (decision.action !== "open" || decision.plans.length === 0) return;
     if (inFlightRef.current) return;
+    // A structurally unusable candle feed is not a trading condition.
+    if (feedBroken) return;
+
 
     const sigKey = decision.setupKey;
     if (!sigKey || managedRef.current.has(sigKey)) return;
@@ -472,7 +491,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       qc.invalidateQueries({ queryKey: ["snapshot"] });
       inFlightRef.current = false;
     })();
-  }, [decision, composite, analysis, confluence, macro, executor, envKey, log, qc]);
+  }, [decision, composite, analysis, confluence, macro, executor, envKey, feedBroken, log, qc]);
 
   // --- Autonomous position management on every price tick ---------------
   useEffect(() => {

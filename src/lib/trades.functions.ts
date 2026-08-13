@@ -24,6 +24,9 @@ const OpenTradeInput = z.object({
    * replays the same order must never open a second position.
    */
   client_order_id: z.string().min(8).max(120).optional(),
+  /** Signal lifetime, UTC ms. An expired plan is refused outright. */
+  issued_at: z.number().int().positive().optional(),
+  expires_at: z.number().int().positive().optional(),
 });
 
 export const openPaperTrade = createServerFn({ method: "POST" })
@@ -47,6 +50,13 @@ export const openPaperTrade = createServerFn({ method: "POST" })
     const guard = await checkAccountProtection(context.supabase, context.userId, "paper");
     if (!guard.ok) throw new Error(guard.reason ?? "Blocked by account protection");
 
+    // Signal expiry: a setup reasoned about minutes ago is not the setup the
+    // market is offering now.
+    const { isExpired, modelFill } = await import("@/lib/services/signal");
+    if (isExpired(data.expires_at)) {
+      throw new Error("Execution refused — signal expired before it could be filled.");
+    }
+
     const { revalidateOrder } = await import("@/lib/services/execution-guard.server");
     const revalidation = await revalidateOrder(
       {
@@ -60,14 +70,26 @@ export const openPaperTrade = createServerFn({ method: "POST" })
     );
     if (!revalidation.ok) throw new Error(`Execution refused — ${revalidation.reason}`);
 
+    // Paper trading fills the way a broker would: cross the spread, then take
+    // assumed adverse slippage. The idealised plan price is kept for audit.
+    const fill =
+      revalidation.spot != null
+        ? modelFill({
+            direction: data.direction,
+            mid: revalidation.spot,
+            spread: revalidation.spread ?? 0.3,
+          })
+        : { price: data.entry_price, cost: 0 };
+
+    const entryPrice = fill.price;
     const rr = data.take_profit_1
-      ? Math.abs(data.take_profit_1 - data.entry_price) / Math.max(0.01, Math.abs(data.entry_price - data.stop_loss))
+      ? Math.abs(data.take_profit_1 - entryPrice) / Math.max(0.01, Math.abs(entryPrice - data.stop_loss))
       : null;
     const { data: row, error } = await context.supabase.from("trades").insert({
       user_id: context.userId,
       symbol: "XAUUSD",
       direction: data.direction,
-      entry_price: data.entry_price,
+      entry_price: entryPrice,
       stop_loss: data.stop_loss,
       take_profit_1: data.take_profit_1 ?? null,
       take_profit_2: data.take_profit_2 ?? null,
@@ -78,7 +100,19 @@ export const openPaperTrade = createServerFn({ method: "POST" })
       timeframe: data.timeframe ?? null,
       session: data.session ?? null,
       reason_entry: data.reason_entry ?? null,
-      ai_analysis: data.ai_analysis ?? null,
+      ai_analysis: {
+        ...(typeof data.ai_analysis === "object" && data.ai_analysis ? data.ai_analysis : {}),
+        execution: {
+          planned_entry: data.entry_price,
+          fill_price: entryPrice,
+          fill_cost_usd: fill.cost,
+          server_spot: revalidation.spot ?? null,
+          server_spread: revalidation.spread ?? null,
+          issued_at: data.issued_at ?? null,
+          expires_at: data.expires_at ?? null,
+          model: "paper-fill: spread crossed + assumed slippage",
+        },
+      },
       client_order_id: data.client_order_id ?? null,
       source: data.source,
       environment: data.environment ?? null,

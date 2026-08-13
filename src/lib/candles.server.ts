@@ -6,12 +6,18 @@
 // every consuming module already handles missing data.
 
 import type { Candle } from "@/lib/indicators";
+import { validateSeries, type IntegrityReport } from "./services/candle-integrity";
 
 const BASE = "https://query1.finance.yahoo.com/v8/finance/chart";
 const UA = "Mozilla/5.0 (compatible; GoldMindAI/1.0)";
 
-interface Entry { at: number; candles: Candle[] }
+interface Entry { at: number; candles: Candle[]; report: IntegrityReport }
 const cache = new Map<string, Entry>();
+
+/** Integrity verdict for the last fetch of a series, keyed like the cache. */
+export function lastIntegrityReport(symbol: string, interval: string, range: string): IntegrityReport | null {
+  return cache.get(`${symbol}|${interval}|${range}`)?.report ?? null;
+}
 
 /** Map an app timeframe (minutes / "D") onto provider interval + range. */
 export function intervalFor(timeframe: string): { interval: string; range: string; ttlMs: number } {
@@ -45,12 +51,15 @@ export async function fetchCandles(symbol: string, interval: string, range: stri
       if ([o, h, l, c].some((x) => x == null || !Number.isFinite(Number(x)))) continue;
       out.push({ t: ts[i] * 1000, o: Number(o), h: Number(h), l: Number(l), c: Number(c), v: Number(v ?? 0) });
     }
-    cache.set(key, { at: Date.now(), candles: out });
-    return out;
+    // Every series is cleaned and graded before anything structural reads it.
+    const { candles, report } = validateSeries(out);
+    cache.set(key, { at: Date.now(), candles, report });
+    return candles;
   } catch {
     // Serve a stale cache entry rather than nothing.
     if (hit) return hit.candles;
-    cache.set(key, { at: Date.now(), candles: [] });
+    const empty = validateSeries([]);
+    cache.set(key, { at: Date.now(), candles: [], report: empty.report });
     return [];
   }
 }
