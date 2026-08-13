@@ -446,6 +446,9 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   useEffect(() => {
     if (decision.action !== "open" || decision.plans.length === 0) return;
     if (inFlightRef.current) return;
+    // A structurally unusable candle feed is not a trading condition.
+    if (feedBroken) return;
+
 
     const sigKey = decision.setupKey;
     if (!sigKey || managedRef.current.has(sigKey)) return;
