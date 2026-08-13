@@ -22,6 +22,8 @@ export interface RevalidationResult {
   reason?: string;
   /** Live server price at validation time, when one was available. */
   spot?: number | null;
+  /** Live server spread at validation time, when one was available. */
+  spread?: number | null;
 }
 
 /** Entry may not have drifted further than this from live spot. */
@@ -62,10 +64,10 @@ export async function revalidateOrder(
   if (!quote) return { ok: false, reason: "No live server-side price — execution refused." };
 
   if (Date.now() - quote.timestamp > 60_000) {
-    return { ok: false, reason: "Server price is stale — execution refused.", spot: quote.mid };
+    return { ok: false, reason: "Server price is stale — execution refused.", spot: quote.mid, spread: quote.spread };
   }
   if (quote.spread > maxSpread) {
-    return { ok: false, reason: `Spread ${quote.spread.toFixed(2)} exceeds ${maxSpread}.`, spot: quote.mid };
+    return { ok: false, reason: `Spread ${quote.spread.toFixed(2)} exceeds ${maxSpread}.`, spot: quote.mid, spread: quote.spread };
   }
 
   const driftPct = (Math.abs(order.entry_price - quote.mid) / quote.mid) * 100;
@@ -74,8 +76,9 @@ export async function revalidateOrder(
       ok: false,
       reason: `Price moved ${driftPct.toFixed(2)}% away from the planned entry — setup expired.`,
       spot: quote.mid,
+      spread: quote.spread,
     };
   }
 
-  return { ok: true, spot: quote.mid };
+  return { ok: true, spot: quote.mid, spread: quote.spread };
 }
