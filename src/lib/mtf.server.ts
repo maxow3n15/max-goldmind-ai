@@ -8,6 +8,7 @@ import { fetchCandles, intervalFor } from "@/lib/candles.server";
 import type { Candle } from "@/lib/indicators";
 import { buildMultiTimeframeReport, type MultiTimeframeReport, type TimeframeKey } from "./services/mtf";
 import { buildLiquidityLevels, readStructure, type LiquidityLevel, type StructureRead } from "./services/structure";
+import { validateSeries, worstStatus, type IntegrityReport, type SeriesStatus } from "./services/candle-integrity";
 
 /** Gold futures track spot XAUUSD closely and carry real volume. */
 const GOLD_SYMBOL = "GC=F";
@@ -24,6 +25,12 @@ export interface MarketStructureBundle {
   lastCandleAt: number | null;
   candleAgeMs: number | null;
   degraded: boolean;
+  /** Feed integrity per timeframe, plus the worst verdict across them all. */
+  integrity: {
+    status: SeriesStatus;
+    byTimeframe: Record<string, IntegrityReport>;
+    issues: string[];
+  };
 }
 
 let cache: { at: number; timeframe: string; value: MarketStructureBundle } | null = null;
@@ -41,6 +48,17 @@ export async function buildMarketStructure(timeframe: string): Promise<MarketStr
   );
 
   const byTf = Object.fromEntries(entries) as Partial<Record<TimeframeKey, Candle[]>>;
+
+  // Grade every series before a single structural conclusion is drawn.
+  const byTimeframe: Record<string, IntegrityReport> = {};
+  for (const tf of TF_KEYS) {
+    byTimeframe[tf] = validateSeries(byTf[tf] ?? []).report;
+  }
+  const integrityStatus = worstStatus(TF_KEYS.map((tf) => byTimeframe[tf].status));
+  const integrityIssues = TF_KEYS.flatMap((tf) =>
+    byTimeframe[tf].issues.map((m) => `${tf}: ${m}`),
+  ).slice(0, 12);
+
   const mtf = buildMultiTimeframeReport(byTf);
 
   const tfKey = (TF_KEYS.includes(timeframe as TimeframeKey) ? timeframe : "15") as TimeframeKey;
@@ -65,7 +83,8 @@ export async function buildMarketStructure(timeframe: string): Promise<MarketStr
     levels,
     lastCandleAt,
     candleAgeMs: lastCandleAt == null ? null : Date.now() - lastCandleAt,
-    degraded: mtf.degraded,
+    degraded: mtf.degraded || integrityStatus !== "OK",
+    integrity: { status: integrityStatus, byTimeframe, issues: integrityIssues },
   };
 
   cache = { at: Date.now(), timeframe, value };
