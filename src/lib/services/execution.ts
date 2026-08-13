@@ -6,6 +6,7 @@
 // modes is a factory swap. We NEVER fake a successful live order.
 
 import type { ExecutionEngine, TradePlan } from "./types";
+import { signalWindow, SIGNAL_TTL_MS } from "./signal";
 import { openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { updateTradeStop } from "@/lib/autopilot.functions";
 
@@ -37,7 +38,8 @@ export function createPaperExecutionEngine(fns: {
           ai_analysis: plan.ai_analysis,
           environment: plan.environment ?? null,
           client_order_id: plan.client_order_id,
-
+          issued_at: plan.issued_at,
+          expires_at: plan.expires_at,
         },
       });
       return { id: row.id, broker_id: null };
@@ -118,6 +120,9 @@ export function buildLadderPlans(opts: {
   riskPctPerLeg: number;
   /** Decision-cycle id; makes each leg's submission idempotent. */
   cycleId?: string;
+  /** Overrides the default signal lifetime. */
+  ttlMs?: number;
+  now?: number;
 }): TradePlan[] {
   const { base, balance } = opts;
   const riskPct = Math.min(opts.riskPctPerLeg, MAX_RISK_PER_LEG_PCT);
@@ -128,8 +133,12 @@ export function buildLadderPlans(opts: {
     .sort((a, b) => (base.direction === "BUY" ? a - b : b - a))
     .slice(0, 3);
 
+  const window = signalWindow(opts.now ?? Date.now(), opts.ttlMs ?? SIGNAL_TTL_MS);
+
   return valid.map((tp, idx) => ({
     ...base,
+    issued_at: window.issued_at,
+    expires_at: window.expires_at,
     take_profit_1: tp,
     take_profit_2: valid[idx + 1] ?? null,
     take_profit_3: valid[idx + 2] ?? null,
