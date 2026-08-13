@@ -491,7 +491,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       qc.invalidateQueries({ queryKey: ["snapshot"] });
       inFlightRef.current = false;
     })();
-  }, [decision, composite, analysis, confluence, macro, executor, envKey, log, qc]);
+  }, [decision, composite, analysis, confluence, macro, executor, envKey, feedBroken, log, qc]);
 
   // --- Autonomous position management on every price tick ---------------
   useEffect(() => {
