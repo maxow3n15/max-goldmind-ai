@@ -7,6 +7,7 @@ import type { MarketQuote, ConnectionStatus } from "@/lib/market-data.types";
 import type { CompositeConfidence, MacroReport } from "./macro.types";
 import type { ChallengeStatus } from "@/lib/challenge/engine";
 import { classifyDataQuality, type DataQuality } from "./data-quality";
+import { CONFIDENCE_GATES } from "./scoring";
 
 export interface SafetyInput {
   analysis: any | null;
@@ -38,7 +39,8 @@ export interface SafetyInput {
  * Hard floor for automated execution. A user may raise this in settings but
  * never lower it — the check below always takes the maximum of the two.
  */
-const MIN_CONFIDENCE = 88;
+// Single source of truth for the final confidence floor: scoring.ts.
+const MIN_CONFIDENCE = CONFIDENCE_GATES.FINAL;
 const MIN_RR = 2.0;
 const MAX_SPREAD = 0.5;
 /** Below this, the timeframes disagree too much to call it a clean read. */
