@@ -175,6 +175,12 @@ export async function runScheduledTick() {
 
       const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
 
+      // Live mode is only actually executable when the user has a healthy
+      // default broker whose credentials still decrypt.
+      const { isLiveBrokerConnected } = await import("@/lib/brokers/live-execution.server");
+      const execConnected =
+        tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+
       // Classify first so the environment's own track record can inform the
       // adaptive policy in the very same cycle.
       const preEnvKey = environmentKey(classifyEnvironment(quant ?? null, macro));
@@ -198,7 +204,7 @@ export async function runScheduledTick() {
         trades,
         killSwitch: { active: false, reason: null, since: null } as any,
         running: true,
-        execConnected: tradingMode === "paper" ? true : true,
+        execConnected,
         tradingMode,
         challenge,
         calibration,
@@ -217,12 +223,22 @@ export async function runScheduledTick() {
       });
       for (const a of actions) {
         if (a.action.type === "close") {
-          await closeTrade(supabaseAdmin, userId, a.trade.id, quote?.mid ?? a.trade.entry_price, a.action.reason);
+          await closeTrade(
+            supabaseAdmin, userId, a.trade.id,
+            quote?.mid ?? a.trade.entry_price, a.action.reason, tradingMode,
+          );
           managed += 1;
         } else if (a.action.type === "move_stop") {
-          await supabaseAdmin.from("trades")
-            .update({ stop_loss: a.action.new_stop })
-            .eq("id", a.trade.id).eq("user_id", userId);
+          if (tradingMode === "live") {
+            const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+            await modifyLiveOrderCore(supabaseAdmin, userId, {
+              id: a.trade.id, stop_loss: a.action.new_stop,
+            });
+          } else {
+            await supabaseAdmin.from("trades")
+              .update({ stop_loss: a.action.new_stop })
+              .eq("id", a.trade.id).eq("user_id", userId);
+          }
           managed += 1;
         }
       }
@@ -240,7 +256,7 @@ export async function runScheduledTick() {
       // ---- Open new legs --------------------------------------------------
       if (decision.action === "open" && !decision.killSwitchTrip && !feedBroken) {
         for (const plan of decision.plans) {
-          const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey);
+          const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey, quote?.spread ?? undefined);
           if (inserted) opened += 1;
         }
       }
@@ -305,12 +321,39 @@ async function openTrade(
   plan: any,
   mode: "paper" | "live",
   environment: string | null,
+  spread?: number,
 ) {
   if (plan.client_order_id) {
     const { data: existing } = await supabase.from("trades").select("id")
       .eq("user_id", userId).eq("client_order_id", plan.client_order_id).maybeSingle();
     if (existing) return false;
   }
+
+  // Live mode goes through the very same broker execution core the browser
+  // autopilot uses — a real order is placed before any row is written.
+  if (mode === "live") {
+    const { placeLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+    const res = await placeLiveOrderCore(supabase, userId, {
+      direction: plan.direction,
+      entry_price: plan.entry,
+      stop_loss: plan.stop_loss,
+      take_profit_1: plan.take_profit_1 ?? null,
+      take_profit_2: plan.take_profit_2 ?? null,
+      take_profit_3: plan.take_profit_3 ?? null,
+      lot_size: plan.lot_size,
+      spread,
+      confidence: plan.confidence ?? undefined,
+      timeframe: plan.timeframe ?? undefined,
+      session: plan.session ?? undefined,
+      reason_entry: plan.reason ?? undefined,
+      ai_analysis: plan.ai_analysis ?? undefined,
+      source: "auto",
+      environment,
+      client_order_id: plan.client_order_id ?? null,
+    });
+    return res.ok;
+  }
+
   const { error } = await supabase.from("trades").insert({
     user_id: userId,
     symbol: "XAUUSD",
@@ -342,7 +385,15 @@ async function closeTrade(
   id: string,
   exitPrice: number,
   reason: string,
+  mode: "paper" | "live" = "paper",
 ) {
+  if (mode === "live") {
+    const { closeLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+    await closeLiveOrderCore(supabase, userId, {
+      id, exit_price: exitPrice, reason_exit: reason,
+    });
+    return;
+  }
   const { data: trade } = await supabase.from("trades").select("*")
     .eq("id", id).eq("user_id", userId).maybeSingle();
   if (!trade || trade.status !== "open") return;

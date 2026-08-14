@@ -16,15 +16,6 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function sessionNow(): string {
-  const h = new Date().getUTCHours();
-  if (h >= 0 && h < 7) return "Asian";
-  if (h >= 7 && h < 12) return "London";
-  if (h >= 12 && h < 17) return "London/NY";
-  if (h >= 17 && h < 21) return "New York";
-  return "After hours";
-}
-
 export const Route = createFileRoute("/api/public/cron/tick")({
   server: {
     handlers: {
@@ -55,5 +46,3 @@ export const Route = createFileRoute("/api/public/cron/tick")({
     },
   },
 });
-
-void sessionNow;
