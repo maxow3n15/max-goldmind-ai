@@ -283,22 +283,64 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   );
 
   let lotSize: number | null = null;
+  let riskAmount: number | null = null;
+  let actualRiskPct: number | null = null;
   if (input.proposal) {
-    const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);
-    if (stopDistance > 0) {
-      const riskAmount = (balance * effectiveRiskPct) / 100;
-      const raw = riskAmount / (stopDistance * GOLD_CONTRACT_SIZE);
-      // Never let one trade breach the remaining exposure headroom.
-      const headroom = Math.max(0, L.maxTotalExposureLots - exposureLots);
-      lotSize = Math.max(0.01, Math.min(Number(raw.toFixed(2)), Number(headroom.toFixed(2)) || 0.01));
-      if (input.atr && input.atr > 0) {
-        // Flag stops that are unusually tight relative to current volatility.
-        if (stopDistance < input.atr * 0.5) {
+    const spec = input.spec;
+    if (!isUsableSpec(spec)) {
+      // Fail safe: no verified contract size / tick value / volume rules means
+      // we cannot size the trade honestly. Never assume a gold contract.
+      block(
+        "symbol_spec",
+        "Broker symbol specification unavailable",
+        "contract size, tick value and volume rules could not be sourced from the broker",
+      );
+    } else {
+      const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);
+      if (stopDistance <= 0) {
+        block("stop_distance", "Invalid stop distance", "entry and stop loss are identical");
+      } else {
+        const perLot = riskPerLot(spec, stopDistance);
+        const budget = (balance * effectiveRiskPct) / 100;
+        const raw = perLot > 0 ? budget / perLot : 0;
+
+        // Never let one trade breach the remaining exposure headroom.
+        const headroom = Math.max(0, L.maxTotalExposureLots - exposureLots);
+        const capped = Math.min(raw, headroom, spec.volumeMax);
+        const rounded = roundVolumeToStep(capped, spec);
+
+        if (rounded < spec.volumeMin) {
+          block(
+            "min_volume",
+            "Risk budget below broker minimum volume",
+            `${rounded} lots < broker minimum ${spec.volumeMin}`,
+          );
+        } else {
+          // Re-derive the true monetary risk from the ROUNDED volume — the
+          // pre-rounding estimate is not what the broker will actually fill.
+          const actual = rounded * perLot;
+          const actualPct = (actual / balance) * 100;
+          if (actualPct > L.maxRiskPerTradePct + 1e-9) {
+            block(
+              "risk_after_rounding",
+              "Rounded position size exceeds max risk per trade",
+              `${actualPct.toFixed(3)}% > ${L.maxRiskPerTradePct}% at ${rounded} lots`,
+            );
+          } else {
+            lotSize = rounded;
+            riskAmount = Number(actual.toFixed(2));
+            actualRiskPct = Number(actualPct.toFixed(3));
+          }
+        }
+
+        if (input.atr && input.atr > 0 && stopDistance < input.atr * 0.5) {
+          // Flag stops that are unusually tight relative to current volatility.
           warn("tight_stop", "Stop is tight for current volatility", `${stopDistance.toFixed(2)} vs ATR ${input.atr.toFixed(2)}`);
         }
       }
     }
   }
+
 
   // ---- Health score -----------------------------------------------------
   let score = 100;
