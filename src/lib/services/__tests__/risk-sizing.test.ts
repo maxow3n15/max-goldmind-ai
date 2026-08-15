@@ -6,6 +6,7 @@ import {
   type RiskInput,
   type SymbolSpec,
 } from "@/lib/services/risk-engine";
+import { identityConversion } from "@/lib/services/fx";
 
 const spec = (over: Partial<SymbolSpec> = {}): SymbolSpec => ({
   symbol: "XAUUSD",
@@ -16,6 +17,9 @@ const spec = (over: Partial<SymbolSpec> = {}): SymbolSpec => ({
   volumeMax: 50,
   volumeStep: 0.01,
   marginRate: 0.005,
+  quoteCurrency: "USD",
+  accountCurrency: "USD",
+  conversion: identityConversion("USD"),
   source: "test",
   ...over,
 });
