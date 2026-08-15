@@ -318,20 +318,35 @@ const oanda: BrokerConnector = {
       body: JSON.stringify({
         order: {
           type: "MARKET",
-          instrument: "XAU_USD",
+          instrument: c["symbol"] || "XAU_USD",
           units: String(units),
           timeInForce: "FOK",
           positionFill: "DEFAULT",
+          ...(o.client_order_id
+            ? { clientExtensions: { id: o.client_order_id.slice(0, 128), tag: "goldmind" } }
+            : {}),
           stopLossOnFill: o.stop_loss ? { price: o.stop_loss.toFixed(2) } : undefined,
           takeProfitOnFill: o.take_profit ? { price: o.take_profit.toFixed(2) } : undefined,
         },
       }),
     });
-    return {
-      broker_order_id: String(
-        res.orderFillTransaction?.tradeOpened?.tradeID ?? res.orderCreateTransaction?.id ?? "",
-      ),
-    };
+    // OANDA answers 201 even when it cancels/rejects the order: inspect the
+    // transactions rather than trusting the HTTP status.
+    const rejected =
+      res.orderRejectTransaction ?? res.orderCancelTransaction ?? res.errorMessage ?? null;
+    const tradeId = String(res.orderFillTransaction?.tradeOpened?.tradeID ?? "");
+    if (!tradeId) {
+      const detail =
+        res.orderCancelTransaction?.reason ??
+        res.orderRejectTransaction?.rejectReason ??
+        res.errorMessage ??
+        "order did not produce a fill";
+      throw new Error(`OANDA order not filled: ${String(detail).slice(0, 200)}`);
+    }
+    if (rejected) {
+      throw new Error(`OANDA order rejected: ${String(rejected?.reason ?? rejected).slice(0, 200)}`);
+    }
+    return { broker_order_id: tradeId };
   },
   async positionExists(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");
@@ -343,6 +358,28 @@ const oanda: BrokerConnector = {
     if (!state) throw new Error("OANDA trade state: unexpected response shape");
     return state === "OPEN";
   },
+  async fetchTrade(c, positionId) {
+    const base = oandaBase(c["environment"] ?? "practice");
+    const res = await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}`, {
+      label: "OANDA trade detail",
+      headers: oandaHeaders(c),
+    });
+    const t = res?.trade;
+    if (!t) throw new Error("OANDA trade detail: trade not found at broker");
+    const units = Number(t.currentUnits ?? t.initialUnits ?? 0);
+    return {
+      id: String(t.id ?? positionId),
+      state: String(t.state ?? "UNKNOWN").toUpperCase(),
+      direction: units === 0 ? null : units > 0 ? ("BUY" as const) : ("SELL" as const),
+      volume: Math.abs(units) / OANDA_UNITS_PER_LOT,
+      entry_price: Number.isFinite(Number(t.price)) ? Number(t.price) : null,
+      stop_loss: t.stopLossOrder?.price != null ? Number(t.stopLossOrder.price) : null,
+      take_profit: t.takeProfitOrder?.price != null ? Number(t.takeProfitOrder.price) : null,
+      unrealized_pnl: t.unrealizedPL != null ? Number(t.unrealizedPL) : null,
+      realized_pnl: t.realizedPL != null ? Number(t.realizedPL) : null,
+    };
+  },
+
   async closePosition(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");
     await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}/close`, {
