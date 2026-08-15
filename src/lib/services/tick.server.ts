@@ -87,6 +87,7 @@ async function runTickCycle(supabaseAdmin: any) {
 
   let opened = 0;
   let managed = 0;
+  let reconciled = 0;
   const errors: string[] = [];
 
   for (const settings of enabled) {
@@ -349,7 +350,7 @@ async function runTickCycle(supabaseAdmin: any) {
     }
   }
 
-  return { users: enabled.length, opened, managed, errors };
+  return { users: enabled.length, opened, managed, reconciled, errors };
 }
 
 /* -------------------------------------------------------------- */
