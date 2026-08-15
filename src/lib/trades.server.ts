@@ -16,7 +16,11 @@ export async function checkAccountProtection(
   supabase: any,
   userId: string,
   mode: "paper" | "live",
+  /** Authoritative broker environment, resolved server-side. Defaults to the
+   *  most restrictive interpretation (real money) when not supplied. */
+  environment?: import("@/lib/brokers/environment.server").ExecutionEnvironment,
 ): Promise<ProtectionResult> {
+
   const [{ data: settings }, { data: openRows }] = await Promise.all([
     supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("trades").select("id").eq("user_id", userId).eq("status", "open"),
