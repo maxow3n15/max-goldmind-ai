@@ -47,6 +47,38 @@ export interface LiquidityLevel {
   swept: boolean;
 }
 
+/**
+ * A swing pivot whose liquidity was taken and then rejected. This is the
+ * signature that distinguishes a stop-run from a genuine break: price pierces
+ * the pivot, then closes back on the origin side within a few candles.
+ */
+export interface SwingSweep {
+  index: number;
+  t: number;
+  /** The pivot price that was taken. */
+  level: number;
+  side: "buy_side" | "sell_side";
+  penetration: number;
+  /** True when price closed back inside the range after piercing. */
+  reclaimed: boolean;
+}
+
+/**
+ * A failed order block: an OB that price closed decisively through. Once
+ * violated it flips polarity and becomes support/resistance in the other
+ * direction.
+ */
+export interface BreakerBlock {
+  index: number;
+  t: number;
+  /** Direction the breaker now supports (opposite of the failed OB). */
+  direction: "bullish" | "bearish";
+  top: number;
+  bottom: number;
+  /** True once price has traded back into the breaker since it formed. */
+  retested: boolean;
+}
+
 export interface StructureRead {
   bias: StructureBias;
   /** Last structural event, most recent first. */
@@ -55,6 +87,10 @@ export interface StructureRead {
   swingLows: SwingPoint[];
   fvgs: FairValueGap[];
   orderBlocks: OrderBlock[];
+  /** Recent stop-runs on swing pivots, newest first. */
+  sweeps: SwingSweep[];
+  /** Violated order blocks that have flipped polarity, newest first. */
+  breakers: BreakerBlock[];
   /** 0..1 position of price inside the dealing range (0 = discount low). */
   rangePosition: number | null;
   equilibrium: number | null;
@@ -73,6 +109,8 @@ const EMPTY: StructureRead = {
   swingLows: [],
   fvgs: [],
   orderBlocks: [],
+  sweeps: [],
+  breakers: [],
   rangePosition: null,
   equilibrium: null,
   premiumDiscount: null,
@@ -80,6 +118,7 @@ const EMPTY: StructureRead = {
   equalHighs: [],
   equalLows: [],
   lastPrice: null,
+
   atr: null,
 };
 
