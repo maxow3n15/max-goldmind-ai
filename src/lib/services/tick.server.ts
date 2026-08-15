@@ -35,8 +35,31 @@ function sessionNow(): string {
 }
 
 
+export const TICK_LOCK_KEY = "scheduled_tick";
+/** Slightly longer than the cron interval, so a slow run is not double-fired. */
+export const TICK_LOCK_TTL_SECONDS = 120;
+
+/**
+ * Entry point for the cron route. Takes a cluster-wide lock first: overlapping
+ * invocations return `{ skipped: "locked" }` instead of acting on the same
+ * users twice in one window.
+ */
 export async function runScheduledTick() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { acquireLock } = await import("@/lib/services/lock.server");
+
+  const lock = await acquireLock(supabaseAdmin, TICK_LOCK_KEY, TICK_LOCK_TTL_SECONDS);
+  if (!lock) {
+    return { users: 0, opened: 0, managed: 0, skipped: "locked" as const };
+  }
+  try {
+    return await runTickCycle(supabaseAdmin);
+  } finally {
+    await lock.release();
+  }
+}
+
+async function runTickCycle(supabaseAdmin: any) {
 
   const { data: users } = await supabaseAdmin
     .from("user_settings")
