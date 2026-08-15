@@ -171,6 +171,17 @@ Interpret the evidence above and return JSON only.`;
   parsed.setup = setup;
   parsed.setup_available = !!setup;
   parsed.reference_price = price;
+  parsed.evidence_provided = !!evidence;
+
+  // Belt and braces: a setup produced without deterministic evidence is an
+  // unsourced guess, whatever the model claimed. Drop it rather than let it
+  // reach sizing.
+  if (!evidence && parsed.setup) {
+    rejections.push("Setup discarded: produced without a deterministic evidence brief.");
+    parsed.setup = null;
+    parsed.setup_available = false;
+  }
+
   if (rejections.length > 0) {
     parsed.setup_rejections = rejections;
     parsed.explanation = `${parsed.explanation ?? ""} ${rejections[0]}`.trim();
