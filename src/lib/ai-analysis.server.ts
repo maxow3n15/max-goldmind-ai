@@ -67,6 +67,12 @@ function parseJsonObject(raw: string): any {
   }
 }
 
+export interface AnalysisEvidence {
+  text: string;
+  insufficient: boolean;
+  insufficientReasons: string[];
+}
+
 export async function runMarketAnalysis(opts: {
   timeframe: string;
   price?: number;
@@ -74,6 +80,11 @@ export async function runMarketAnalysis(opts: {
   /** When present, every call outcome is logged to the AI health panel. */
   userId?: string | null;
   source?: string;
+  /**
+   * Deterministic evidence brief from ai-context.server. Strongly recommended:
+   * without it the model has no facts to reason from and can only guess.
+   */
+  evidence?: AnalysisEvidence | null;
 }): Promise<any> {
   const telemetry = newTelemetry();
   const source = opts.source ?? "analysis";
@@ -86,11 +97,40 @@ export async function runMarketAnalysis(opts: {
     throw new Error(msg);
   }
 
+  const evidence = opts.evidence ?? null;
+
+  // Hard gap: refuse before spending a model call. A setup built on top of a
+  // known data hole is worse than no setup, and the model would happily
+  // produce one if asked.
+  if (evidence?.insufficient) {
+    await recordAiHealth({
+      userId: opts.userId, source, status: "validation_reject", telemetry,
+      error: evidence.insufficientReasons[0],
+    });
+    return {
+      bias: "neutral",
+      confidence: 0,
+      market_structure: "Not assessed — deterministic evidence incomplete.",
+      liquidity: "Not assessed.",
+      session_context: opts.session ?? "unknown",
+      setup_available: false,
+      setup: null,
+      explanation: `Analysis skipped: ${evidence.insufficientReasons.join(" ")}`,
+      invalidation: "n/a",
+      reference_price: price,
+      evidence_gaps: evidence.insufficientReasons,
+      skipped: true,
+    };
+  }
+
   const user = `Analyze XAUUSD right now on the ${opts.timeframe} timeframe.
 Reference spot price: ${price.toFixed(2)} USD/oz (this is live — all levels must be built around it).
 Current session: ${opts.session ?? "unknown"}.
-Consider higher-timeframe context (4H / Daily) as well as the requested timeframe.
-Return JSON only.`;
+
+${evidence?.text ?? "=== DETERMINISTIC EVIDENCE ===\n(unavailable this cycle — you have no verified structural data, so you MUST return setup_available=false)\n=== END EVIDENCE ==="}
+
+Interpret the evidence above and return JSON only.`;
+
 
   let raw: string;
   try {
