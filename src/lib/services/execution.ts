@@ -149,13 +149,21 @@ export function buildLadderPlans(opts: {
   }));
 }
 
-// Universal position-size calculator. Uses % of balance / stop distance.
-// Assumes XAUUSD contract of 100 oz per 1.0 lot (industry standard).
+// Position sizing. There is ONE arithmetic implementation of "money at risk
+// per lot" — `riskPerLot` in the risk engine — and everything (UI preview,
+// paper fills, backtests, broker execution) goes through it. This wrapper only
+// supplies the spec and the broker volume rules.
+//
+// For paper trading and pre-trade previews the deterministic simulation spec
+// is used; live orders are ALWAYS re-sized server-side against the broker's
+// own specification and its validated account-currency FX conversion.
 export function computeLotSize(opts: {
   balance: number;
   riskPct: number;      // e.g. 1 = 1%
   entry: number;
   stop_loss: number;
+  /** Broker specification when one is available (account-currency tick value). */
+  spec?: SymbolSpec;
   minLot?: number;
   maxLot?: number;
   step?: number;
@@ -163,12 +171,17 @@ export function computeLotSize(opts: {
   const { balance, riskPct, entry, stop_loss } = opts;
   const riskUsd = Math.max(0, balance * (riskPct / 100));
   const dist = Math.abs(entry - stop_loss);
-  if (dist <= 0 || riskUsd <= 0) return opts.minLot ?? 0.01;
-  // XAUUSD: 1.0 lot = 100 oz → $100 per $1 move.
-  const lots = riskUsd / (dist * 100);
-  const step = opts.step ?? 0.01;
-  const min = opts.minLot ?? 0.01;
-  const max = opts.maxLot ?? 100;
-  const rounded = Math.floor(lots / step) * step;
-  return Math.max(min, Math.min(max, +rounded.toFixed(2)));
+  const base = opts.spec ?? SIMULATION_GOLD_SPEC;
+  const spec: SymbolSpec = {
+    ...base,
+    volumeMin: opts.minLot ?? base.volumeMin,
+    volumeMax: opts.maxLot ?? base.volumeMax,
+    volumeStep: opts.step ?? base.volumeStep,
+  };
+  if (dist <= 0 || riskUsd <= 0) return spec.volumeMin;
+  const perLot = riskPerLot(spec, dist);
+  if (!(perLot > 0)) return spec.volumeMin;
+  const rounded = roundVolumeToStep(riskUsd / perLot, spec);
+  return Math.max(spec.volumeMin, rounded);
 }
+
