@@ -567,6 +567,27 @@ export type Database = {
         }
         Relationships: []
       }
+      system_locks: {
+        Row: {
+          acquired_at: string
+          holder: string | null
+          key: string
+          locked_until: string
+        }
+        Insert: {
+          acquired_at?: string
+          holder?: string | null
+          key: string
+          locked_until: string
+        }
+        Update: {
+          acquired_at?: string
+          holder?: string | null
+          key?: string
+          locked_until?: string
+        }
+        Relationships: []
+      }
       trades: {
         Row: {
           ai_analysis: Json | null
@@ -830,7 +851,14 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      release_lock: {
+        Args: { _holder: string; _key: string }
+        Returns: undefined
+      }
+      try_acquire_lock: {
+        Args: { _holder: string; _key: string; _ttl_seconds: number }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
