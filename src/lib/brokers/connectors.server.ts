@@ -29,6 +29,23 @@ export interface StandardOrder {
   comment?: string;
 }
 
+/** Broker-reported state of a single open/closed trade. */
+export interface BrokerTradeState {
+  id: string;
+  /** OPEN | CLOSED | PENDING | UNKNOWN, upper-cased. */
+  state: string;
+  direction: "BUY" | "SELL" | null;
+  /** Volume in this connector's lot convention. */
+  volume: number | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profit: number | null;
+  unrealized_pnl: number | null;
+  realized_pnl: number | null;
+}
+
+
+
 export interface BrokerConnector {
   id: string;
   fetchAccount(creds: Record<string, string>): Promise<BrokerAccountInfo>;
