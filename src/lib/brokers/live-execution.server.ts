@@ -180,6 +180,54 @@ export async function placeLiveOrderCore(
   return { ok: true as const, trade: row, broker_order_id: brokerOrderId };
 }
 
+/**
+ * Status written when we cannot prove the broker acted on our instruction.
+ * A trade in this state is deliberately NOT treated as closed or modified:
+ * automation must leave it alone until a human or reconciliation resolves it.
+ */
+export const RECONCILIATION_REQUIRED = "reconciliation_required";
+
+/** Resolve connector + credentials for the broker that holds this trade. */
+async function resolveTradeBroker(supabase: any, userId: string, meta: any) {
+  if (!meta?.broker_order_id || !meta?.broker_id) return null;
+  const { data: conn } = await supabase
+    .from("broker_connections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("broker_id", meta.broker_id)
+    .maybeSingle();
+  if (!conn) return null;
+  const { getConnector } = await import("@/lib/brokers/connectors.server");
+  const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
+  return {
+    conn,
+    connector: getConnector(conn.broker_id),
+    creds: decryptCredentials(conn.credentials_ciphertext),
+    positionId: String(meta.broker_order_id),
+  };
+}
+
+async function flagReconciliation(
+  supabase: any,
+  userId: string,
+  tradeId: string,
+  brokerId: string,
+  operation: "close" | "modify",
+  message: string,
+) {
+  console.error(
+    `[live-execution] ${operation} unconfirmed — trade=${tradeId} broker=${brokerId} error=${message}`,
+  );
+  await supabase
+    .from("trades")
+    .update({
+      status: RECONCILIATION_REQUIRED,
+      reason_exit: `Broker ${operation} unconfirmed: ${message}`.slice(0, 500),
+    })
+    .eq("id", tradeId)
+    .eq("user_id", userId);
+}
+
 export async function closeLiveOrderCore(
   supabase: any,
   userId: string,
@@ -194,19 +242,39 @@ export async function closeLiveOrderCore(
   if (!trade) throw new Error("Trade not found");
 
   const meta: any = trade.ai_analysis ?? {};
-  if (meta.broker_order_id) {
-    const { data: conn } = await supabase
-      .from("broker_connections")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("broker_id", meta.broker_id ?? "")
-      .maybeSingle();
-    if (conn) {
-      const { getConnector } = await import("@/lib/brokers/connectors.server");
-      const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
-      await getConnector(conn.broker_id)
-        .closePosition(decryptCredentials(conn.credentials_ciphertext), String(meta.broker_order_id))
-        .catch(() => undefined);
+  const target = await resolveTradeBroker(supabase, userId, meta);
+  if (meta.broker_order_id && !target) {
+    const msg = "broker connection for this trade no longer exists";
+    await flagReconciliation(supabase, userId, data.id, String(meta.broker_id ?? "unknown"), "close", msg);
+    throw new Error(`Live close not confirmed (${msg}); trade flagged for reconciliation.`);
+  }
+
+  if (target) {
+    // 1. Ask the broker to close.
+    let closeError: string | null = null;
+    try {
+      await target.connector.closePosition(target.creds, target.positionId);
+    } catch (e: any) {
+      closeError = String(e?.message ?? "broker close call failed").slice(0, 300);
+    }
+
+    // 2. Confirm with the broker's own state when the connector can tell us.
+    //    Without verification an errored call is treated as UNCONFIRMED — we
+    //    fail closed rather than assume the position went away.
+    let confirmed = closeError == null;
+    if (target.connector.positionExists) {
+      try {
+        confirmed = !(await target.connector.positionExists(target.creds, target.positionId));
+      } catch (e: any) {
+        confirmed = false;
+        closeError = closeError ?? String(e?.message ?? "position verification failed").slice(0, 300);
+      }
+    }
+
+    if (!confirmed) {
+      const msg = closeError ?? "broker still reports the position as open";
+      await flagReconciliation(supabase, userId, data.id, String(target.conn.broker_id), "close", msg);
+      throw new Error(`Live close not confirmed (${msg}); trade flagged for reconciliation.`);
     }
   }
 
@@ -217,7 +285,7 @@ export async function closeLiveOrderCore(
   // Value per price point comes from the spec captured at entry; fall back to
   // the broker's current spec only if the trade predates spec capture.
   const storedSpec = (trade.ai_analysis as any)?.symbol_spec;
-  let valuePerPoint: number | null =
+  const valuePerPoint: number | null =
     storedSpec && Number(storedSpec.tickValue) > 0 && Number(storedSpec.tickSize) > 0
       ? Number(storedSpec.tickValue) / Number(storedSpec.tickSize)
       : null;
@@ -253,23 +321,23 @@ export async function modifyLiveOrderCore(
     .eq("user_id", userId)
     .single();
   const meta: any = trade?.ai_analysis ?? {};
-  if (meta.broker_order_id && meta.broker_id) {
-    const { data: conn } = await supabase
-      .from("broker_connections")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("broker_id", meta.broker_id)
-      .maybeSingle();
-    if (conn) {
-      const { getConnector } = await import("@/lib/brokers/connectors.server");
-      const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
-      await getConnector(conn.broker_id)
-        .modifyPosition(decryptCredentials(conn.credentials_ciphertext), String(meta.broker_order_id), {
-          stop_loss: data.stop_loss,
-        })
-        .catch(() => undefined);
+  const target = await resolveTradeBroker(supabase, userId, meta);
+  if (meta.broker_order_id && !target) {
+    const msg = "broker connection for this trade no longer exists";
+    await flagReconciliation(supabase, userId, data.id, String(meta.broker_id ?? "unknown"), "modify", msg);
+    throw new Error(`Live stop modification not confirmed (${msg}); trade flagged for reconciliation.`);
+  }
+
+  if (target) {
+    try {
+      await target.connector.modifyPosition(target.creds, target.positionId, { stop_loss: data.stop_loss });
+    } catch (e: any) {
+      const msg = String(e?.message ?? "broker modify call failed").slice(0, 300);
+      await flagReconciliation(supabase, userId, data.id, String(target.conn.broker_id), "modify", msg);
+      throw new Error(`Live stop modification not confirmed (${msg}); trade flagged for reconciliation.`);
     }
   }
+
   await supabase
     .from("trades")
     .update({ stop_loss: data.stop_loss })
@@ -278,3 +346,4 @@ export async function modifyLiveOrderCore(
     .eq("status", "open");
   return { ok: true };
 }
+
