@@ -64,11 +64,15 @@ export function runSafety(i: SafetyInput): SafetyReport {
   const minRr = Math.max(MIN_RR, num(s.min_risk_reward, MIN_RR));
   const maxSpread = Math.min(MAX_SPREAD, num(s.max_spread, MAX_SPREAD));
   const dq = i.dataQuality ?? classifyDataQuality(i.quote, i.connection);
-  // The deterministic engine is authoritative; the AI's self-reported number
-  // is only a fallback for display when the engine could not run.
-  const confidence = Number(
-    i.structuredConfidence ?? i.composite?.final ?? i.confluence?.score ?? i.analysis?.confidence ?? 0,
-  );
+  // The deterministic engine is authoritative. The AI's self-reported number is
+  // NEVER accepted here: a language model asked to score itself will happily
+  // return 95 for a setup the structured engine would have refused. When no
+  // engine number exists we fail closed with 0, which blocks the gate.
+  const engineConfidenceRaw =
+    i.structuredConfidence ?? i.composite?.final ?? i.confluence?.score ?? null;
+  const engineConfidence = Number(engineConfidenceRaw);
+  const hasEngineConfidence = engineConfidenceRaw != null && Number.isFinite(engineConfidence);
+  const confidence = hasEngineConfidence ? engineConfidence : 0;
 
   push("kill_switch", "Kill switch inactive", !i.killSwitch.active, i.killSwitch.reason ?? undefined);
   push("auto_execute", "Auto-execute enabled in settings", !!i.autoExecuteEnabled);
@@ -79,8 +83,11 @@ export function runSafety(i: SafetyInput): SafetyReport {
   push("market_open", "Market data recent", !!(i.quote && Date.now() - i.quote.timestamp < 60_000));
   push("setup_available", "AI setup available", !!setup);
   push("confidence", `Confidence ≥ ${minConfidence}%`,
-    confidence >= minConfidence,
-    `${Math.round(confidence)}%`);
+    hasEngineConfidence && confidence >= minConfidence,
+    hasEngineConfidence
+      ? `${Math.round(confidence)}%`
+      : "deterministic confidence unavailable — AI self-reported score is not accepted");
+
   push("mtf_alignment", `Timeframe agreement ≥ ${MIN_MTF_ALIGNMENT}%`,
     i.mtfAlignment == null ? false : i.mtfAlignment >= MIN_MTF_ALIGNMENT,
     i.mtfAlignment == null ? "multi-timeframe read unavailable" : `${Math.round(i.mtfAlignment)}%`);
