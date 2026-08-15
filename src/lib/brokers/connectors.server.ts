@@ -5,6 +5,8 @@
 // Adding a broker means adding one object to CONNECTORS — no change to the
 // AI, risk or execution logic.
 
+import type { SymbolSpec } from "@/lib/services/risk-engine";
+
 export interface BrokerAccountInfo {
   account_name: string | null;
   account_number: string | null;
@@ -30,6 +32,12 @@ export interface StandardOrder {
 export interface BrokerConnector {
   id: string;
   fetchAccount(creds: Record<string, string>): Promise<BrokerAccountInfo>;
+  /**
+   * Real contract specification for the symbol, straight from the broker.
+   * Optional: connectors that cannot supply verified spec data omit it, and
+   * callers must then refuse to size the trade rather than assume defaults.
+   */
+  fetchSymbolSpec?(creds: Record<string, string>, symbol: string): Promise<SymbolSpec>;
   placeOrder(creds: Record<string, string>, order: StandardOrder): Promise<{ broker_order_id: string }>;
   closePosition(creds: Record<string, string>, positionId: string): Promise<void>;
   modifyPosition(
@@ -38,6 +46,16 @@ export interface BrokerConnector {
     patch: { stop_loss?: number; take_profit?: number },
   ): Promise<void>;
 }
+
+/** Throws when a required numeric spec field is missing — never guess. */
+function reqNum(v: unknown, field: string, label: string): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${label}: broker did not report a usable "${field}" for this symbol`);
+  }
+  return n;
+}
+
 
 async function req(url: string, init: RequestInit & { label: string }): Promise<any> {
   const { label, ...rest } = init;
@@ -95,6 +113,40 @@ const metaapi: BrokerConnector = {
       open_positions: Array.isArray(positions) ? positions.length : 0,
     };
   },
+  async fetchSymbolSpec(c, symbol) {
+    const base = metaapiBase(c["region"] ?? "");
+    const sym = c["symbol"] || symbol;
+    const label = "MetaApi symbol specification";
+    const spec = await req(
+      `${base}/users/current/accounts/${c["accountId"]}/symbols/${encodeURIComponent(sym)}/specification`,
+      { label, headers: metaapiHeaders(c) },
+    );
+    const info = await req(`${base}/users/current/accounts/${c["accountId"]}/account-information`, {
+      label: "MetaApi account information",
+      headers: metaapiHeaders(c),
+    });
+    const accountCurrency = String(info.currency ?? "").toUpperCase();
+    const profitCurrency = String(spec.quoteCurrency ?? spec.profitCurrency ?? "").toUpperCase();
+    if (!accountCurrency || !profitCurrency || accountCurrency !== profitCurrency) {
+      throw new Error(
+        `${label}: symbol profit currency ${profitCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
+      );
+    }
+    const contractSize = reqNum(spec.contractSize, "contractSize", label);
+    const tickSize = reqNum(spec.tickSize ?? (spec.digits != null ? Math.pow(10, -Number(spec.digits)) : undefined), "tickSize", label);
+    const leverage = Number(info.leverage);
+    return {
+      symbol: sym,
+      contractSize,
+      tickSize,
+      tickValue: tickSize * contractSize,
+      volumeMin: reqNum(spec.minVolume, "minVolume", label),
+      volumeMax: reqNum(spec.maxVolume, "maxVolume", label),
+      volumeStep: reqNum(spec.volumeStep, "volumeStep", label),
+      marginRate: Number.isFinite(leverage) && leverage > 0 ? 1 / leverage : null,
+      source: "metaapi",
+    };
+  },
   async placeOrder(c, o) {
     const base = metaapiBase(c["region"] ?? "");
     const res = await req(`${base}/users/current/accounts/${c["accountId"]}/trade`, {
@@ -149,6 +201,9 @@ const oandaHeaders = (c: Record<string, string>) => ({
   "Content-Type": "application/json",
 });
 
+/** This connector's lot convention: OANDA trades gold in ounces (units). */
+const OANDA_UNITS_PER_LOT = 100;
+
 const oanda: BrokerConnector = {
   id: "oanda",
   async fetchAccount(c) {
@@ -170,10 +225,53 @@ const oanda: BrokerConnector = {
       open_positions: num(a.openPositionCount),
     };
   },
+  async fetchSymbolSpec(c, symbol) {
+    const base = oandaBase(c["environment"] ?? "practice");
+    const label = "OANDA instrument specification";
+    const instrument = c["symbol"] || "XAU_USD";
+    const res = await req(
+      `${base}/v3/accounts/${c["accountId"]}/instruments?instruments=${encodeURIComponent(instrument)}`,
+      { label, headers: oandaHeaders(c) },
+    );
+    const summary = await req(`${base}/v3/accounts/${c["accountId"]}/summary`, {
+      label: "OANDA account summary",
+      headers: oandaHeaders(c),
+    });
+    const i = (res.instruments ?? [])[0];
+    if (!i) throw new Error(`${label}: instrument ${instrument} not available on this account`);
+    const quoteCurrency = String(instrument.split("_")[1] ?? "").toUpperCase();
+    const accountCurrency = String(summary.account?.currency ?? "").toUpperCase();
+    if (!quoteCurrency || quoteCurrency !== accountCurrency) {
+      throw new Error(
+        `${label}: instrument quote currency ${quoteCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
+      );
+    }
+    // OANDA prices per unit (1 unit = 1 oz for XAU_USD); this connector's
+    // "lot" is UNITS_PER_LOT units, matching how placeOrder converts volume.
+    const unitsPerLot = OANDA_UNITS_PER_LOT;
+    const displayPrecision = reqNum(i.displayPrecision, "displayPrecision", label);
+    const tickSize = Math.pow(10, -displayPrecision);
+    const tradeUnitsPrecision = Number(i.tradeUnitsPrecision);
+    if (!Number.isFinite(tradeUnitsPrecision) || tradeUnitsPrecision < 0) {
+      throw new Error(`${label}: broker did not report a usable "tradeUnitsPrecision" for this symbol`);
+    }
+    const marginRate = Number(i.marginRate);
+    return {
+      symbol: instrument,
+      contractSize: unitsPerLot,
+      tickSize,
+      tickValue: tickSize * unitsPerLot,
+      volumeMin: reqNum(i.minimumTradeSize, "minimumTradeSize", label) / unitsPerLot,
+      volumeMax: reqNum(i.maximumOrderUnits, "maximumOrderUnits", label) / unitsPerLot,
+      volumeStep: Math.pow(10, -tradeUnitsPrecision) / unitsPerLot,
+      marginRate: Number.isFinite(marginRate) && marginRate > 0 ? marginRate : null,
+      source: "oanda",
+    };
+  },
   async placeOrder(c, o) {
     const base = oandaBase(c["environment"] ?? "practice");
-    // OANDA sizes gold in ounces: 1 lot = 100 oz.
-    const units = Math.round(o.volume * 100) * (o.direction === "BUY" ? 1 : -1);
+    // OANDA sizes gold in ounces: 1 lot = OANDA_UNITS_PER_LOT oz.
+    const units = Math.round(o.volume * OANDA_UNITS_PER_LOT) * (o.direction === "BUY" ? 1 : -1);
     const res = await req(`${base}/v3/accounts/${c["accountId"]}/orders`, {
       label: "OANDA order",
       method: "POST",
@@ -265,6 +363,45 @@ const capital: BrokerConnector = {
       free_margin: num(bal.available),
       margin_level: num(bal.deposit) > 0 ? (num(bal.balance) / num(bal.deposit)) * 100 : null,
       open_positions: Array.isArray(positions.positions) ? positions.positions.length : 0,
+    };
+  },
+  async fetchSymbolSpec(c, symbol) {
+    const s = await capitalSession(c);
+    const label = "Capital.com market specification";
+    const epic = c["symbol"] || symbol || "GOLD";
+    const m = await req(`${s.base}/api/v1/markets/${encodeURIComponent(epic)}`, { label, headers: s.headers });
+    const inst = m.instrument ?? {};
+    const rules = m.dealingRules ?? {};
+    const accounts = await req(`${s.base}/api/v1/accounts`, { label: "Capital.com accounts", headers: s.headers });
+    const list = accounts.accounts ?? [];
+    const acct = list.find((x: any) => x.preferred) ?? list[0] ?? {};
+    const accountCurrency = String(acct.currency ?? "").toUpperCase();
+    const instrumentCurrency = String(
+      inst.currency ?? (Array.isArray(inst.currencies) ? inst.currencies[0]?.code : undefined) ?? "",
+    ).toUpperCase();
+    if (!accountCurrency || !instrumentCurrency || accountCurrency !== instrumentCurrency) {
+      throw new Error(
+        `${label}: instrument currency ${instrumentCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
+      );
+    }
+    const contractSize = reqNum(inst.lotSize, "lotSize", label);
+    const decimals = reqNum(m.snapshot?.decimalPlacesFactor, "decimalPlacesFactor", label);
+    const tickSize = Math.pow(10, -decimals);
+    const marginFactor = Number(inst.marginFactor);
+    const marginUnit = String(inst.marginFactorUnit ?? "PERCENTAGE").toUpperCase();
+    const marginRate = Number.isFinite(marginFactor) && marginFactor > 0
+      ? (marginUnit === "PERCENTAGE" ? marginFactor / 100 : marginFactor)
+      : null;
+    return {
+      symbol: epic,
+      contractSize,
+      tickSize,
+      tickValue: tickSize * contractSize,
+      volumeMin: reqNum(rules.minDealSize?.value, "minDealSize", label),
+      volumeMax: reqNum(rules.maxDealSize?.value, "maxDealSize", label),
+      volumeStep: reqNum(rules.minSizeIncrement?.value, "minSizeIncrement", label),
+      marginRate,
+      source: "capital",
     };
   },
   async placeOrder(c, o) {
@@ -433,6 +570,33 @@ const bridge: BrokerConnector = {
       free_margin: num(a.free_margin, num(a.balance)),
       margin_level: a.margin_level != null ? num(a.margin_level) : null,
       open_positions: num(a.open_positions),
+    };
+  },
+  async fetchSymbolSpec(c, symbol) {
+    const base = bridgeBase(c);
+    const label = "Bridge symbol specification";
+    const sym = c["symbol"] || symbol;
+    const spec = await req(`${base}/symbols/${encodeURIComponent(sym)}`, {
+      label,
+      headers: bridgeHeaders(c),
+    });
+    const contractSize = reqNum(spec.contract_size ?? spec.contractSize, "contract_size", label);
+    const tickSize = reqNum(spec.tick_size ?? spec.tickSize, "tick_size", label);
+    const tickValue = Number(spec.tick_value ?? spec.tickValue);
+    const marginRate = Number(spec.margin_rate ?? spec.marginRate);
+    const leverage = Number(spec.leverage);
+    return {
+      symbol: sym,
+      contractSize,
+      tickSize,
+      tickValue: Number.isFinite(tickValue) && tickValue > 0 ? tickValue : tickSize * contractSize,
+      volumeMin: reqNum(spec.volume_min ?? spec.volumeMin, "volume_min", label),
+      volumeMax: reqNum(spec.volume_max ?? spec.volumeMax, "volume_max", label),
+      volumeStep: reqNum(spec.volume_step ?? spec.volumeStep, "volume_step", label),
+      marginRate: Number.isFinite(marginRate) && marginRate > 0
+        ? marginRate
+        : Number.isFinite(leverage) && leverage > 0 ? 1 / leverage : null,
+      source: "bridge",
     };
   },
   async placeOrder(c, o) {

@@ -72,6 +72,24 @@ export async function placeLiveOrderCore(
   const conn = await loadDefaultBrokerConnection(supabase, userId);
   if (!conn) return fail("No default broker connection.");
 
+  const { getConnector } = await import("@/lib/brokers/connectors.server");
+  const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
+  const { isUsableSpec, roundVolumeToStep } = await import("@/lib/services/risk-engine");
+  const connector = getConnector(conn.broker_id);
+  const creds = decryptCredentials(conn.credentials_ciphertext);
+
+  // Real contract spec from the broker — never an assumed gold contract.
+  if (!connector.fetchSymbolSpec) {
+    return fail(`Broker ${conn.broker_id} cannot supply a symbol specification — live sizing refused.`);
+  }
+  let spec;
+  try {
+    spec = await connector.fetchSymbolSpec(creds, "XAUUSD");
+  } catch (e: any) {
+    return fail(String(e?.message ?? "Broker symbol specification unavailable").slice(0, 300));
+  }
+  if (!isUsableSpec(spec)) return fail("Broker symbol specification is incomplete — live sizing refused.");
+
   // --- execution safety gates ---
   if ((data.spread ?? 0) > MAX_SPREAD) return fail(`Spread ${data.spread?.toFixed(2)} above ${MAX_SPREAD} limit.`);
   const stopDistance = Math.abs(data.entry_price - data.stop_loss);
@@ -84,23 +102,31 @@ export async function placeLiveOrderCore(
       data.direction === "BUY" ? data.take_profit_1 <= data.entry_price : data.take_profit_1 >= data.entry_price;
     if (tpWrong) return fail("Take profit is on the wrong side of entry.");
   }
-  if (data.lot_size < 0.01) return fail("Position size below broker minimum (0.01 lots).");
-  const requiredMargin = data.entry_price * data.lot_size * 100 * 0.005; // ~200:1 leverage estimate
-  if (Number(conn.free_margin ?? 0) > 0 && requiredMargin > Number(conn.free_margin)) {
-    return fail("Insufficient free margin on the broker account for this position size.");
+
+  // Volume must respect the broker's real min / max / step.
+  const volume = roundVolumeToStep(Math.min(data.lot_size, spec.volumeMax), spec);
+  if (volume < spec.volumeMin) {
+    return fail(`Position size ${volume} below broker minimum (${spec.volumeMin} lots).`);
   }
 
-  const { getConnector } = await import("@/lib/brokers/connectors.server");
-  const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
-  const connector = getConnector(conn.broker_id);
-  const creds = decryptCredentials(conn.credentials_ciphertext);
+  // Margin from the broker's actual margin rate — no assumed leverage.
+  if (Number(conn.free_margin ?? 0) > 0) {
+    if (spec.marginRate == null) {
+      return fail("Broker did not report a margin requirement — cannot verify free margin.");
+    }
+    const requiredMargin = data.entry_price * volume * spec.contractSize * spec.marginRate;
+    if (requiredMargin > Number(conn.free_margin)) {
+      return fail("Insufficient free margin on the broker account for this position size.");
+    }
+  }
+
 
   let brokerOrderId = "";
   try {
     const res = await connector.placeOrder(creds, {
       symbol: "XAUUSD",
       direction: data.direction,
-      volume: data.lot_size,
+      volume,
       stop_loss: data.stop_loss,
       take_profit: data.take_profit_1 ?? null,
       comment: "GoldMind AI",
@@ -130,13 +156,18 @@ export async function placeLiveOrderCore(
       take_profit_1: data.take_profit_1 ?? null,
       take_profit_2: data.take_profit_2 ?? null,
       take_profit_3: data.take_profit_3 ?? null,
-      lot_size: data.lot_size,
+      lot_size: volume,
       risk_reward: rr,
       confidence: data.confidence ?? null,
       timeframe: data.timeframe ?? null,
       session: data.session ?? null,
       reason_entry: data.reason_entry ?? null,
-      ai_analysis: { ...(data.ai_analysis ?? {}), broker_order_id: brokerOrderId, broker_id: conn.broker_id },
+      ai_analysis: {
+        ...(data.ai_analysis ?? {}),
+        broker_order_id: brokerOrderId,
+        broker_id: conn.broker_id,
+        symbol_spec: spec,
+      },
       source: data.source ?? "auto",
       client_order_id: data.client_order_id ?? null,
       environment: data.environment ?? null,
@@ -183,7 +214,17 @@ export async function closeLiveOrderCore(
     trade.direction === "BUY"
       ? data.exit_price - Number(trade.entry_price)
       : Number(trade.entry_price) - data.exit_price;
-  const pnl = diff * 100 * Number(trade.lot_size);
+  // Value per price point comes from the spec captured at entry; fall back to
+  // the broker's current spec only if the trade predates spec capture.
+  const storedSpec = (trade.ai_analysis as any)?.symbol_spec;
+  let valuePerPoint: number | null =
+    storedSpec && Number(storedSpec.tickValue) > 0 && Number(storedSpec.tickSize) > 0
+      ? Number(storedSpec.tickValue) / Number(storedSpec.tickSize)
+      : null;
+  if (valuePerPoint == null) {
+    throw new Error("Cannot compute live PnL: contract specification for this trade is unavailable.");
+  }
+  const pnl = diff * valuePerPoint * Number(trade.lot_size);
 
   const { error } = await supabase
     .from("trades")

@@ -34,6 +34,58 @@ export interface RiskPosition {
   stop_loss: number;
 }
 
+/**
+ * Contract specification for the traded symbol, as reported by the broker.
+ *
+ * Every field must come from the broker's own symbol/instrument endpoint —
+ * nothing here may be guessed. When a connector cannot supply one, sizing is
+ * refused rather than falling back to an assumed gold contract.
+ */
+export interface SymbolSpec {
+  symbol: string;
+  /** Units (e.g. troy ounces) per 1.0 lot. */
+  contractSize: number;
+  /** Smallest price increment the broker quotes. */
+  tickSize: number;
+  /** Account-currency value of one tick for 1.0 lot. */
+  tickValue: number;
+  volumeMin: number;
+  volumeMax: number;
+  volumeStep: number;
+  /** Fraction of notional required as margin (0.005 = 200:1). Null when unknown. */
+  marginRate: number | null;
+  /** Where the spec came from: connector id, or "simulation" for backtests. */
+  source: string;
+}
+
+/** Money at risk per 1.0 lot for a given stop distance, from the broker spec. */
+export function riskPerLot(spec: SymbolSpec, stopDistance: number): number {
+  const valuePerPricePoint = spec.tickValue / spec.tickSize;
+  return Math.abs(stopDistance) * valuePerPricePoint;
+}
+
+/** Round a volume DOWN to the broker's step, then clamp into [min, max]. */
+export function roundVolumeToStep(volume: number, spec: SymbolSpec): number {
+  const step = spec.volumeStep > 0 ? spec.volumeStep : spec.volumeMin;
+  const decimals = Math.min(8, (String(step).split(".")[1] ?? "").length);
+  const stepped = Math.floor(volume / step) * step;
+  const rounded = Number(stepped.toFixed(decimals));
+  if (rounded > spec.volumeMax) return Number(spec.volumeMax.toFixed(decimals));
+  return rounded;
+}
+
+export function isUsableSpec(spec: SymbolSpec | null | undefined): spec is SymbolSpec {
+  return (
+    !!spec &&
+    Number.isFinite(spec.contractSize) && spec.contractSize > 0 &&
+    Number.isFinite(spec.tickSize) && spec.tickSize > 0 &&
+    Number.isFinite(spec.tickValue) && spec.tickValue > 0 &&
+    Number.isFinite(spec.volumeMin) && spec.volumeMin > 0 &&
+    Number.isFinite(spec.volumeMax) && spec.volumeMax >= spec.volumeMin &&
+    Number.isFinite(spec.volumeStep) && spec.volumeStep > 0
+  );
+}
+
 export interface RiskInput {
   now: number;
   limits: RiskLimits;
@@ -54,7 +106,10 @@ export interface RiskInput {
   feedHealthy: boolean;
   /** Proposed trade, when sizing is requested. */
   proposal?: { direction: Direction; entry: number; stop_loss: number } | null;
+  /** Broker symbol specification. REQUIRED whenever `proposal` is supplied. */
+  spec?: SymbolSpec | null;
 }
+
 
 export interface RiskViolation {
   key: string;
@@ -76,6 +131,10 @@ export interface RiskAssessment {
   effectiveRiskPct: number;
   /** Volatility-normalised lot size for the proposal, when one is supplied. */
   lotSize: number | null;
+  /** Monetary risk recomputed from the ROUNDED lot size (account currency). */
+  riskAmount: number | null;
+  /** `riskAmount` as a % of balance, recomputed after rounding. */
+  actualRiskPct: number | null;
   exposureLots: number;
   drawdownPct: number;
   dailyLossPct: number;
@@ -85,8 +144,25 @@ export interface RiskAssessment {
   notes: string[];
 }
 
-/** XAUUSD: 1.00 lot = 100 oz, so $1 of price move = $100 per lot. */
+/**
+ * Contract size used by the deterministic BACKTESTER only, where there is no
+ * broker to query. Never use this for live or paper order sizing.
+ */
 export const GOLD_CONTRACT_SIZE = 100;
+
+/** Explicit simulation spec for the backtester (not a broker fallback). */
+export const SIMULATION_GOLD_SPEC: SymbolSpec = {
+  symbol: "XAUUSD",
+  contractSize: GOLD_CONTRACT_SIZE,
+  tickSize: 0.01,
+  tickValue: 0.01 * GOLD_CONTRACT_SIZE,
+  volumeMin: 0.01,
+  volumeMax: 100,
+  volumeStep: 0.01,
+  marginRate: null,
+  source: "simulation",
+};
+
 
 export const DEFAULT_RISK_LIMITS: RiskLimits = {
   riskPerTradePct: 0.5,
@@ -207,22 +283,64 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   );
 
   let lotSize: number | null = null;
+  let riskAmount: number | null = null;
+  let actualRiskPct: number | null = null;
   if (input.proposal) {
-    const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);
-    if (stopDistance > 0) {
-      const riskAmount = (balance * effectiveRiskPct) / 100;
-      const raw = riskAmount / (stopDistance * GOLD_CONTRACT_SIZE);
-      // Never let one trade breach the remaining exposure headroom.
-      const headroom = Math.max(0, L.maxTotalExposureLots - exposureLots);
-      lotSize = Math.max(0.01, Math.min(Number(raw.toFixed(2)), Number(headroom.toFixed(2)) || 0.01));
-      if (input.atr && input.atr > 0) {
-        // Flag stops that are unusually tight relative to current volatility.
-        if (stopDistance < input.atr * 0.5) {
+    const spec = input.spec;
+    if (!isUsableSpec(spec)) {
+      // Fail safe: no verified contract size / tick value / volume rules means
+      // we cannot size the trade honestly. Never assume a gold contract.
+      block(
+        "symbol_spec",
+        "Broker symbol specification unavailable",
+        "contract size, tick value and volume rules could not be sourced from the broker",
+      );
+    } else {
+      const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);
+      if (stopDistance <= 0) {
+        block("stop_distance", "Invalid stop distance", "entry and stop loss are identical");
+      } else {
+        const perLot = riskPerLot(spec, stopDistance);
+        const budget = (balance * effectiveRiskPct) / 100;
+        const raw = perLot > 0 ? budget / perLot : 0;
+
+        // Never let one trade breach the remaining exposure headroom.
+        const headroom = Math.max(0, L.maxTotalExposureLots - exposureLots);
+        const capped = Math.min(raw, headroom, spec.volumeMax);
+        const rounded = roundVolumeToStep(capped, spec);
+
+        if (rounded < spec.volumeMin) {
+          block(
+            "min_volume",
+            "Risk budget below broker minimum volume",
+            `${rounded} lots < broker minimum ${spec.volumeMin}`,
+          );
+        } else {
+          // Re-derive the true monetary risk from the ROUNDED volume — the
+          // pre-rounding estimate is not what the broker will actually fill.
+          const actual = rounded * perLot;
+          const actualPct = (actual / balance) * 100;
+          if (actualPct > L.maxRiskPerTradePct + 1e-9) {
+            block(
+              "risk_after_rounding",
+              "Rounded position size exceeds max risk per trade",
+              `${actualPct.toFixed(3)}% > ${L.maxRiskPerTradePct}% at ${rounded} lots`,
+            );
+          } else {
+            lotSize = rounded;
+            riskAmount = Number(actual.toFixed(2));
+            actualRiskPct = Number(actualPct.toFixed(3));
+          }
+        }
+
+        if (input.atr && input.atr > 0 && stopDistance < input.atr * 0.5) {
+          // Flag stops that are unusually tight relative to current volatility.
           warn("tight_stop", "Stop is tight for current volatility", `${stopDistance.toFixed(2)} vs ATR ${input.atr.toFixed(2)}`);
         }
       }
     }
   }
+
 
   // ---- Health score -----------------------------------------------------
   let score = 100;
@@ -243,6 +361,9 @@ export function assessRisk(input: RiskInput): RiskAssessment {
     sizeMultiplier: mult,
     effectiveRiskPct: Number(effectiveRiskPct.toFixed(3)),
     lotSize,
+    riskAmount,
+    actualRiskPct,
+
     exposureLots: Number(exposureLots.toFixed(2)),
     drawdownPct: Number(drawdownPct.toFixed(2)),
     dailyLossPct: Number(dailyLossPct.toFixed(2)),
