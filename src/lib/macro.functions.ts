@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat } from "./ai-gateway.server";
 import { fetchHeadlines } from "./news.server";
+import { readEconomicCalendar } from "./services/economic-calendar";
 import type { MacroReport } from "./services/macro.types";
 
 const SYSTEM = `You are GoldMind AI's macro desk: a senior gold (XAUUSD) fundamental analyst.
@@ -82,10 +83,8 @@ async function build(): Promise<MacroReport> {
   let p: any;
   try { p = JSON.parse(raw); } catch { return neutral("model returned unparseable output"); }
 
-  const events = Array.isArray(p.upcoming_events) ? p.upcoming_events : [];
-  const imminent = events.find(
-    (e: any) => e?.impact === "high" && typeof e.hours_away === "number" && e.hours_away >= 0 && e.hours_away <= 1,
-  );
+  // Deterministic event risk, computed here rather than asked of the model.
+  const calendar = readEconomicCalendar(Date.now());
 
   const byUrl = new Map(news.map((n) => [n.title.toLowerCase().slice(0, 50), n.url]));
   const headlines = (Array.isArray(p.headlines) ? p.headlines : []).slice(0, 10).map((h: any) => ({
