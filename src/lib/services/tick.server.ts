@@ -222,26 +222,36 @@ export async function runScheduledTick() {
         management,
       });
       for (const a of actions) {
-        if (a.action.type === "close") {
-          await closeTrade(
-            supabaseAdmin, userId, a.trade.id,
-            quote?.mid ?? a.trade.entry_price, a.action.reason, tradingMode,
-          );
-          managed += 1;
-        } else if (a.action.type === "move_stop") {
-          if (tradingMode === "live") {
-            const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
-            await modifyLiveOrderCore(supabaseAdmin, userId, {
-              id: a.trade.id, stop_loss: a.action.new_stop,
-            });
-          } else {
-            await supabaseAdmin.from("trades")
-              .update({ stop_loss: a.action.new_stop })
-              .eq("id", a.trade.id).eq("user_id", userId);
+        // An unconfirmed broker close/modify throws and flags the trade for
+        // reconciliation; that must not abort management of the other trades.
+        try {
+          if (a.action.type === "close") {
+            await closeTrade(
+              supabaseAdmin, userId, a.trade.id,
+              quote?.mid ?? a.trade.entry_price, a.action.reason, tradingMode,
+            );
+            managed += 1;
+          } else if (a.action.type === "move_stop") {
+            if (tradingMode === "live") {
+              const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+              await modifyLiveOrderCore(supabaseAdmin, userId, {
+                id: a.trade.id, stop_loss: a.action.new_stop,
+              });
+            } else {
+              await supabaseAdmin.from("trades")
+                .update({ stop_loss: a.action.new_stop })
+                .eq("id", a.trade.id).eq("user_id", userId);
+            }
+            managed += 1;
           }
-          managed += 1;
+        } catch (e: any) {
+          console.error(
+            `[tick] trade management failed — user=${userId} trade=${a.trade.id} action=${a.action.type}:`,
+            e?.message ?? e,
+          );
         }
       }
+
 
       // ---- Kill switch ---------------------------------------------------
       if (decision.killSwitchTrip) {
