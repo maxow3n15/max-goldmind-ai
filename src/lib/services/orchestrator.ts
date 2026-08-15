@@ -26,6 +26,7 @@ import { computeStructuredConfidence, type StructuredConfidence, type FactorKey 
 import type { MultiTimeframeReport } from "./mtf";
 import type { StructureRead } from "./structure";
 import { computeComposite, sizeMultiplier } from "./scoring";
+import { classifySetup, type SetupClassification } from "./setup-models";
 
 /* ------------------------------------------------------------------ */
 /* Account state derived from stored trades                            */
@@ -185,6 +186,8 @@ export interface OrchestratorInput {
   entryStructure?: StructureRead | null;
   /** Per-user confidence factor weights. */
   confidenceWeights?: Partial<Record<FactorKey, number>> | null;
+  /** Session extreme sweep from the deterministic liquidity read. */
+  sessionSweep?: { side: "buy_side" | "sell_side"; reclaimed: boolean; t: number } | null;
 }
 
 export type OrchestratorAction = "open" | "reject" | "halt";
@@ -209,6 +212,8 @@ export interface OrchestratorDecision {
   /** Auditable factor-by-factor confidence. */
   structured: StructuredConfidence | null;
   dataQuality: DataQuality;
+  /** Which named setup model the proposal satisfies, if any. */
+  setup: SetupClassification;
 }
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
@@ -318,6 +323,23 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
   });
 
   const setup = i.analysis?.setup ?? null;
+
+  // Name the setup before considering it. An unnamed setup is not tradable.
+  const classification = classifySetup({
+    proposal: setup
+      ? {
+          direction: setup.direction,
+          entry: Number(setup.entry),
+          stop_loss: Number(setup.stop_loss),
+          take_profit_1: setup.take_profit_1 != null ? Number(setup.take_profit_1) : null,
+        }
+      : null,
+    entryStructure: i.entryStructure ?? null,
+    mtf: i.mtf ?? null,
+    sessionSweep: i.sessionSweep ?? null,
+    atr: i.quant?.volatility?.atr ?? null,
+  });
+
   const setupKey = setup
     ? `${setup.direction}:${setup.entry}:${setup.stop_loss}:${setup.take_profit_1}`
     : null;
@@ -338,11 +360,18 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     setupKey,
     structured,
     dataQuality,
+    setup: classification,
   };
 
   // ---- Gates before sizing ---------------------------------------------
   if (!i.running || i.killSwitch.active) return base;
   if (!safety.ok || !setup || !i.quote) return base;
+
+  // Setup-model gate: safety and confidence can both pass on a proposal that
+  // matches no GoldMind model. Quality over frequency — refuse it.
+  if (!classification.tradable) {
+    return { ...base, rejection: classification.reason ?? "Setup does not match any GoldMind model" };
+  }
 
   if (adaptive.halted) {
     return { ...base, action: "halt", rejection: adaptive.reasons[0] ?? "Capital preservation lockdown" };
@@ -406,6 +435,12 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
       session_stats: i.sessionReport,
       management: i.management,
       environment,
+      setup_model: {
+        type: classification.best?.type ?? null,
+        verdict: classification.best?.verdict ?? null,
+        completeness: classification.best?.completeness ?? null,
+        requirements: classification.best?.requirements ?? [],
+      },
       challenge:
         i.challenge.enforced && cs
           ? {
