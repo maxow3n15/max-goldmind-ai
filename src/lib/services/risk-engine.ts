@@ -11,6 +11,7 @@
 //                         exposure limit that applies.
 
 import type { Direction } from "./types";
+import { identityConversion, validateConversion, type FxConversion } from "./fx";
 
 export interface RiskLimits {
   riskPerTradePct: number;
@@ -194,6 +195,9 @@ export const SIMULATION_GOLD_SPEC: SymbolSpec = {
   volumeMax: 100,
   volumeStep: 0.01,
   marginRate: null,
+  quoteCurrency: "USD",
+  accountCurrency: "USD",
+  conversion: identityConversion("USD"),
   source: "simulation",
 };
 
@@ -321,13 +325,13 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   let actualRiskPct: number | null = null;
   if (input.proposal) {
     const spec = input.spec;
-    if (!isUsableSpec(spec)) {
+    if (!isUsableSpec(spec, now)) {
       // Fail safe: no verified contract size / tick value / volume rules means
       // we cannot size the trade honestly. Never assume a gold contract.
       block(
         "symbol_spec",
         "Broker symbol specification unavailable",
-        "contract size, tick value and volume rules could not be sourced from the broker",
+        specProblem(spec, now) ?? "contract size, tick value and volume rules could not be sourced from the broker",
       );
     } else {
       const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);
