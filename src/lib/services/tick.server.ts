@@ -201,17 +201,18 @@ async function runTickCycle(supabaseAdmin: any) {
         ? buildManagementPlan({ volatility: quant.volatility, momentum: quant.momentum })
         : null;
 
-      const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
-
       // Reconcile before deciding: any trade whose broker state disagrees with
       // ours is moved out of "open", so the decision pipeline below never sizes
       // or manages against a position we cannot account for.
+      let reconciliationBlocked: string | null = null;
+      let brokerEnvironment: string | null = null;
       if (tradingMode === "live") {
         try {
           const { reconcileUserPositions } = await import("@/lib/services/reconciliation.server");
           const rec = await reconcileUserPositions(supabaseAdmin, userId);
           if (rec.mismatches.length > 0) {
             reconciled += rec.mismatches.length;
+            reconciliationBlocked = `${rec.mismatches.length} unresolved broker/database mismatch(es)`;
             errors.push(
               `reconciliation: ${rec.mismatches.length} mismatch(es) for ${userId} — ${rec.mismatches
                 .map((m) => `${m.trade_id}:${m.kind}`)
@@ -219,15 +220,50 @@ async function runTickCycle(supabaseAdmin: any) {
             );
           }
         } catch (e: any) {
+          reconciliationBlocked = "reconciliation failed";
           console.error(`[tick] reconciliation failed for ${userId}:`, e?.message ?? e);
         }
       }
 
       // Live mode is only actually executable when the user has a healthy
       // default broker whose credentials still decrypt.
-      const { isLiveBrokerConnected } = await import("@/lib/brokers/live-execution.server");
-      const execConnected =
-        tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+      const { isLiveBrokerConnected, loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+        await import("@/lib/brokers/live-execution.server");
+      let execConnected = tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+
+      // Broker mode is sized from the BROKER account, never the paper account.
+      if (tradingMode === "live" && execConnected) {
+        try {
+          const conn = await loadDefaultBrokerConnection(supabaseAdmin, userId);
+          const resolved = await resolveConnectionEnvironment(conn);
+          brokerEnvironment = resolved.env;
+          const { getConnector } = await import("@/lib/brokers/connectors.server");
+          const brokerAccount = await getConnector(conn.broker_id).fetchAccount(resolved.credentials);
+          snapshot.account = {
+            balance: brokerAccount.balance,
+            equity: brokerAccount.equity,
+            free_margin: brokerAccount.free_margin,
+            margin_used: Math.max(0, brokerAccount.equity - brokerAccount.free_margin),
+            currency: brokerAccount.currency,
+            source: `broker:${conn.broker_id}`,
+          };
+          await supabaseAdmin
+            .from("broker_connections")
+            .update({
+              ...brokerAccount,
+              status: "connected",
+              last_error: null,
+              last_sync_at: new Date().toISOString(),
+            })
+            .eq("id", conn.id);
+        } catch (e: any) {
+          // No verified broker account state = no autonomous broker trading.
+          execConnected = false;
+          errors.push(`broker account refresh failed for ${userId.slice(0, 8)}: ${String(e?.message ?? e).slice(0, 140)}`);
+        }
+      }
+
+
 
 
       // Classify first so the environment's own track record can inform the
