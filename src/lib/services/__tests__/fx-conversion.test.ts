@@ -204,6 +204,7 @@ const gbpXauSpec = (over: Partial<SymbolSpec> = {}): SymbolSpec => ({
     direction: "inverse",
     legs: ["GBP_USD"],
   },
+  source: "test",
   ...over,
 });
 
