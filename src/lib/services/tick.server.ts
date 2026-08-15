@@ -418,6 +418,13 @@ async function runTickCycle(supabaseAdmin: any) {
           orders_submitted: submitted,
           orders_filled: opened,
           submission_errors: submissionErrors.slice(0, 5),
+          setup_model: decision.setup.best?.type ?? null,
+          setup_verdict: decision.setup.best?.verdict ?? null,
+          setup_completeness: decision.setup.best?.completeness ?? null,
+          setup_missing: (decision.setup.best?.requirements ?? [])
+            .filter((r) => !r.met)
+            .map((r) => r.label)
+            .slice(0, 4),
           feed_integrity: structure?.integrity.status ?? "UNKNOWN",
           feed_issues: structure?.integrity.issues.slice(0, 4) ?? [],
         },
