@@ -32,13 +32,18 @@ export function oandaFxFetcher(
       { headers },
     );
     if (!res.ok) return null;
-    const body = (await res.json().catch(() => null)) as Record<string, any> | null;
-    const p = body?.["prices"]?.[0];
+    const body = (await res.json().catch(() => null)) as {
+      prices?: Array<Record<string, unknown>>;
+    } | null;
+    const p = body?.prices?.[0];
     if (!p) return null;
-    if (p.tradeable === false && !p.closeoutBid) return null;
-    const bid = Number(p.bids?.[0]?.price ?? p.closeoutBid);
-    const ask = Number(p.asks?.[0]?.price ?? p.closeoutAsk);
-    const timestamp = parseTime(p.time);
+    if (p["tradeable"] === false && !p["closeoutBid"]) return null;
+    const bids = p["bids"] as Array<{ price?: unknown }> | undefined;
+    const asks = p["asks"] as Array<{ price?: unknown }> | undefined;
+    const bid = Number(bids?.[0]?.price ?? p["closeoutBid"]);
+    const ask = Number(asks?.[0]?.price ?? p["closeoutAsk"]);
+    const timestamp = parseTime(p["time"]);
+
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || !Number.isFinite(timestamp)) return null;
     return { pair, bid, ask, timestamp, source: "oanda-pricing" };
   };
