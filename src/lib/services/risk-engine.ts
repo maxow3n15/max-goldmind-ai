@@ -34,6 +34,58 @@ export interface RiskPosition {
   stop_loss: number;
 }
 
+/**
+ * Contract specification for the traded symbol, as reported by the broker.
+ *
+ * Every field must come from the broker's own symbol/instrument endpoint —
+ * nothing here may be guessed. When a connector cannot supply one, sizing is
+ * refused rather than falling back to an assumed gold contract.
+ */
+export interface SymbolSpec {
+  symbol: string;
+  /** Units (e.g. troy ounces) per 1.0 lot. */
+  contractSize: number;
+  /** Smallest price increment the broker quotes. */
+  tickSize: number;
+  /** Account-currency value of one tick for 1.0 lot. */
+  tickValue: number;
+  volumeMin: number;
+  volumeMax: number;
+  volumeStep: number;
+  /** Fraction of notional required as margin (0.005 = 200:1). Null when unknown. */
+  marginRate: number | null;
+  /** Where the spec came from: connector id, or "simulation" for backtests. */
+  source: string;
+}
+
+/** Money at risk per 1.0 lot for a given stop distance, from the broker spec. */
+export function riskPerLot(spec: SymbolSpec, stopDistance: number): number {
+  const valuePerPricePoint = spec.tickValue / spec.tickSize;
+  return Math.abs(stopDistance) * valuePerPricePoint;
+}
+
+/** Round a volume DOWN to the broker's step, then clamp into [min, max]. */
+export function roundVolumeToStep(volume: number, spec: SymbolSpec): number {
+  const step = spec.volumeStep > 0 ? spec.volumeStep : spec.volumeMin;
+  const decimals = Math.min(8, (String(step).split(".")[1] ?? "").length);
+  const stepped = Math.floor(volume / step) * step;
+  const rounded = Number(stepped.toFixed(decimals));
+  if (rounded > spec.volumeMax) return Number(spec.volumeMax.toFixed(decimals));
+  return rounded;
+}
+
+export function isUsableSpec(spec: SymbolSpec | null | undefined): spec is SymbolSpec {
+  return (
+    !!spec &&
+    Number.isFinite(spec.contractSize) && spec.contractSize > 0 &&
+    Number.isFinite(spec.tickSize) && spec.tickSize > 0 &&
+    Number.isFinite(spec.tickValue) && spec.tickValue > 0 &&
+    Number.isFinite(spec.volumeMin) && spec.volumeMin > 0 &&
+    Number.isFinite(spec.volumeMax) && spec.volumeMax >= spec.volumeMin &&
+    Number.isFinite(spec.volumeStep) && spec.volumeStep > 0
+  );
+}
+
 export interface RiskInput {
   now: number;
   limits: RiskLimits;
@@ -54,7 +106,10 @@ export interface RiskInput {
   feedHealthy: boolean;
   /** Proposed trade, when sizing is requested. */
   proposal?: { direction: Direction; entry: number; stop_loss: number } | null;
+  /** Broker symbol specification. REQUIRED whenever `proposal` is supplied. */
+  spec?: SymbolSpec | null;
 }
+
 
 export interface RiskViolation {
   key: string;
