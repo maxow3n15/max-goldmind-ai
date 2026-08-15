@@ -56,7 +56,9 @@ function Autopilot() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Fully autonomous XAUUSD trader. Analyses, decides, executes, and manages positions.
-            Currently running in <span className="text-[color:var(--gold)] font-medium">paper mode</span> — MT5 execution is a placeholder until the external bridge is deployed.
+            Broker execution is live for <span className="text-[color:var(--gold)] font-medium">demo/practice accounts</span>;
+            real-money execution is implemented but administratively locked.
+
           </p>
         </div>
         <div className="flex items-center gap-2">
