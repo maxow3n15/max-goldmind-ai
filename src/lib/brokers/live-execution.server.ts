@@ -72,6 +72,24 @@ export async function placeLiveOrderCore(
   const conn = await loadDefaultBrokerConnection(supabase, userId);
   if (!conn) return fail("No default broker connection.");
 
+  const { getConnector } = await import("@/lib/brokers/connectors.server");
+  const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
+  const { isUsableSpec, roundVolumeToStep } = await import("@/lib/services/risk-engine");
+  const connector = getConnector(conn.broker_id);
+  const creds = decryptCredentials(conn.credentials_ciphertext);
+
+  // Real contract spec from the broker — never an assumed gold contract.
+  if (!connector.fetchSymbolSpec) {
+    return fail(`Broker ${conn.broker_id} cannot supply a symbol specification — live sizing refused.`);
+  }
+  let spec;
+  try {
+    spec = await connector.fetchSymbolSpec(creds, "XAUUSD");
+  } catch (e: any) {
+    return fail(String(e?.message ?? "Broker symbol specification unavailable").slice(0, 300));
+  }
+  if (!isUsableSpec(spec)) return fail("Broker symbol specification is incomplete — live sizing refused.");
+
   // --- execution safety gates ---
   if ((data.spread ?? 0) > MAX_SPREAD) return fail(`Spread ${data.spread?.toFixed(2)} above ${MAX_SPREAD} limit.`);
   const stopDistance = Math.abs(data.entry_price - data.stop_loss);
@@ -84,16 +102,24 @@ export async function placeLiveOrderCore(
       data.direction === "BUY" ? data.take_profit_1 <= data.entry_price : data.take_profit_1 >= data.entry_price;
     if (tpWrong) return fail("Take profit is on the wrong side of entry.");
   }
-  if (data.lot_size < 0.01) return fail("Position size below broker minimum (0.01 lots).");
-  const requiredMargin = data.entry_price * data.lot_size * 100 * 0.005; // ~200:1 leverage estimate
-  if (Number(conn.free_margin ?? 0) > 0 && requiredMargin > Number(conn.free_margin)) {
-    return fail("Insufficient free margin on the broker account for this position size.");
+
+  // Volume must respect the broker's real min / max / step.
+  const volume = roundVolumeToStep(Math.min(data.lot_size, spec.volumeMax), spec);
+  if (volume < spec.volumeMin) {
+    return fail(`Position size ${volume} below broker minimum (${spec.volumeMin} lots).`);
   }
 
-  const { getConnector } = await import("@/lib/brokers/connectors.server");
-  const { decryptCredentials } = await import("@/lib/brokers/crypto.server");
-  const connector = getConnector(conn.broker_id);
-  const creds = decryptCredentials(conn.credentials_ciphertext);
+  // Margin from the broker's actual margin rate — no assumed leverage.
+  if (Number(conn.free_margin ?? 0) > 0) {
+    if (spec.marginRate == null) {
+      return fail("Broker did not report a margin requirement — cannot verify free margin.");
+    }
+    const requiredMargin = data.entry_price * volume * spec.contractSize * spec.marginRate;
+    if (requiredMargin > Number(conn.free_margin)) {
+      return fail("Insufficient free margin on the broker account for this position size.");
+    }
+  }
+
 
   let brokerOrderId = "";
   try {
