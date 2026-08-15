@@ -33,6 +33,12 @@ export async function checkAccountProtection(
     return { ok: false, reason: `Maximum open positions reached (${openCount}/${maxOpen}).`, ...base };
   }
   if (mode === "live") {
+    // Non-bypassable administrative lock — checked before anything the user
+    // can influence, so no settings change or replayed request gets past it.
+    const { getLiveExecutionLock } = await import("@/lib/live-lock.server");
+    const lock = getLiveExecutionLock();
+    if (lock.locked) return { ok: false, reason: lock.reason!, ...base };
+
     if (!settings?.live_trading_enabled || settings?.trading_mode !== "live") {
       return { ok: false, reason: "Live trading is not authorised in settings.", ...base };
     }

@@ -40,6 +40,12 @@ export interface BrokerConnector {
   fetchSymbolSpec?(creds: Record<string, string>, symbol: string): Promise<SymbolSpec>;
   placeOrder(creds: Record<string, string>, order: StandardOrder): Promise<{ broker_order_id: string }>;
   closePosition(creds: Record<string, string>, positionId: string): Promise<void>;
+  /**
+   * True when the broker still reports the position as open.
+   * Optional: connectors that cannot verify state omit it, and callers must
+   * then treat an unconfirmed close as requiring reconciliation.
+   */
+  positionExists?(creds: Record<string, string>, positionId: string): Promise<boolean>;
   modifyPosition(
     creds: Record<string, string>,
     positionId: string,
@@ -163,6 +169,15 @@ const metaapi: BrokerConnector = {
       }),
     });
     return { broker_order_id: String(res.positionId ?? res.orderId ?? "") };
+  },
+  async positionExists(c, positionId) {
+    const base = metaapiBase(c["region"] ?? "");
+    const positions = await req(`${base}/users/current/accounts/${c["accountId"]}/positions`, {
+      label: "MetaApi positions",
+      headers: metaapiHeaders(c),
+    });
+    if (!Array.isArray(positions)) throw new Error("MetaApi positions: unexpected response shape");
+    return positions.some((p: any) => String(p?.id ?? p?.positionId ?? "") === String(positionId));
   },
   async closePosition(c, positionId) {
     const base = metaapiBase(c["region"] ?? "");
@@ -293,6 +308,16 @@ const oanda: BrokerConnector = {
         res.orderFillTransaction?.tradeOpened?.tradeID ?? res.orderCreateTransaction?.id ?? "",
       ),
     };
+  },
+  async positionExists(c, positionId) {
+    const base = oandaBase(c["environment"] ?? "practice");
+    const res = await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}`, {
+      label: "OANDA trade state",
+      headers: oandaHeaders(c),
+    });
+    const state = String(res?.trade?.state ?? "").toUpperCase();
+    if (!state) throw new Error("OANDA trade state: unexpected response shape");
+    return state === "OPEN";
   },
   async closePosition(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");

@@ -87,9 +87,10 @@ function SettingsPage() {
       <Section title="Live trading">
         <div className="rounded-lg border border-[color:var(--warning)]/40 bg-[color:var(--warning)]/5 p-3 text-xs text-[color:var(--warning)] flex gap-2">
           <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5" />
-          <span>Live MT5 execution isn't connected yet in this build. Enabling this only reveals the placeholder connection screen — no real orders are sent.</span>
+          <span>Live broker execution is fully implemented, but it is <strong>administratively locked</strong> on the server. Enabling this here authorises live mode for your account; no real order can be sent until an administrator lifts the server-side lock.</span>
         </div>
-        <Toggle label="Enable live trading UI (paper only for now)" v={form.live_trading_enabled} onChange={(v: any) => upd("live_trading_enabled", v)} />
+        <Toggle label="Authorise live trading for this account" v={form.live_trading_enabled} onChange={(v: any) => upd("live_trading_enabled", v)} />
+
         <Toggle label="Auto-execute AI setups" v={form.auto_execute} onChange={(v: any) => upd("auto_execute", v)} />
       </Section>
 

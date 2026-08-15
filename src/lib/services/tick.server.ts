@@ -35,8 +35,31 @@ function sessionNow(): string {
 }
 
 
+export const TICK_LOCK_KEY = "scheduled_tick";
+/** Slightly longer than the cron interval, so a slow run is not double-fired. */
+export const TICK_LOCK_TTL_SECONDS = 120;
+
+/**
+ * Entry point for the cron route. Takes a cluster-wide lock first: overlapping
+ * invocations return `{ skipped: "locked" }` instead of acting on the same
+ * users twice in one window.
+ */
 export async function runScheduledTick() {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { acquireLock } = await import("@/lib/services/lock.server");
+
+  const lock = await acquireLock(supabaseAdmin, TICK_LOCK_KEY, TICK_LOCK_TTL_SECONDS);
+  if (!lock) {
+    return { users: 0, opened: 0, managed: 0, skipped: "locked" as const };
+  }
+  try {
+    return await runTickCycle(supabaseAdmin);
+  } finally {
+    await lock.release();
+  }
+}
+
+async function runTickCycle(supabaseAdmin: any) {
 
   const { data: users } = await supabaseAdmin
     .from("user_settings")
@@ -64,6 +87,7 @@ export async function runScheduledTick() {
 
   let opened = 0;
   let managed = 0;
+  let reconciled = 0;
   const errors: string[] = [];
 
   for (const settings of enabled) {
@@ -175,11 +199,32 @@ export async function runScheduledTick() {
 
       const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
 
+      // Reconcile before deciding: any trade whose broker state disagrees with
+      // ours is moved out of "open", so the decision pipeline below never sizes
+      // or manages against a position we cannot account for.
+      if (tradingMode === "live") {
+        try {
+          const { reconcileUserPositions } = await import("@/lib/services/reconciliation.server");
+          const rec = await reconcileUserPositions(supabaseAdmin, userId);
+          if (rec.mismatches.length > 0) {
+            reconciled += rec.mismatches.length;
+            errors.push(
+              `reconciliation: ${rec.mismatches.length} mismatch(es) for ${userId} — ${rec.mismatches
+                .map((m) => `${m.trade_id}:${m.kind}`)
+                .join(", ")}`,
+            );
+          }
+        } catch (e: any) {
+          console.error(`[tick] reconciliation failed for ${userId}:`, e?.message ?? e);
+        }
+      }
+
       // Live mode is only actually executable when the user has a healthy
       // default broker whose credentials still decrypt.
       const { isLiveBrokerConnected } = await import("@/lib/brokers/live-execution.server");
       const execConnected =
         tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+
 
       // Classify first so the environment's own track record can inform the
       // adaptive policy in the very same cycle.
@@ -222,26 +267,36 @@ export async function runScheduledTick() {
         management,
       });
       for (const a of actions) {
-        if (a.action.type === "close") {
-          await closeTrade(
-            supabaseAdmin, userId, a.trade.id,
-            quote?.mid ?? a.trade.entry_price, a.action.reason, tradingMode,
-          );
-          managed += 1;
-        } else if (a.action.type === "move_stop") {
-          if (tradingMode === "live") {
-            const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
-            await modifyLiveOrderCore(supabaseAdmin, userId, {
-              id: a.trade.id, stop_loss: a.action.new_stop,
-            });
-          } else {
-            await supabaseAdmin.from("trades")
-              .update({ stop_loss: a.action.new_stop })
-              .eq("id", a.trade.id).eq("user_id", userId);
+        // An unconfirmed broker close/modify throws and flags the trade for
+        // reconciliation; that must not abort management of the other trades.
+        try {
+          if (a.action.type === "close") {
+            await closeTrade(
+              supabaseAdmin, userId, a.trade.id,
+              quote?.mid ?? a.trade.entry_price, a.action.reason, tradingMode,
+            );
+            managed += 1;
+          } else if (a.action.type === "move_stop") {
+            if (tradingMode === "live") {
+              const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+              await modifyLiveOrderCore(supabaseAdmin, userId, {
+                id: a.trade.id, stop_loss: a.action.new_stop,
+              });
+            } else {
+              await supabaseAdmin.from("trades")
+                .update({ stop_loss: a.action.new_stop })
+                .eq("id", a.trade.id).eq("user_id", userId);
+            }
+            managed += 1;
           }
-          managed += 1;
+        } catch (e: any) {
+          console.error(
+            `[tick] trade management failed — user=${userId} trade=${a.trade.id} action=${a.action.type}:`,
+            e?.message ?? e,
+          );
         }
       }
+
 
       // ---- Kill switch ---------------------------------------------------
       if (decision.killSwitchTrip) {
@@ -295,7 +350,7 @@ export async function runScheduledTick() {
     }
   }
 
-  return { users: enabled.length, opened, managed, errors };
+  return { users: enabled.length, opened, managed, reconciled, errors };
 }
 
 /* -------------------------------------------------------------- */

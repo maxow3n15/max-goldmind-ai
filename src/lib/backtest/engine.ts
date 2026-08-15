@@ -5,7 +5,7 @@
 // results reflect the limits the account actually runs under.
 
 import { atrSeries, emaSeries, rsiSeries, type Candle } from "@/lib/indicators";
-import { assessRisk, GOLD_CONTRACT_SIZE, type RiskLimits } from "@/lib/services/risk-engine";
+import { assessRisk, GOLD_CONTRACT_SIZE, SIMULATION_GOLD_SPEC, type RiskLimits } from "@/lib/services/risk-engine";
 import type { Direction } from "@/lib/services/types";
 
 export interface BacktestConfig {
@@ -251,6 +251,7 @@ export function runBacktest(candles: Candle[], config: BacktestConfig): Backtest
       atr: a,
       feedHealthy: true,
       proposal: { direction: sig.direction, entry, stop_loss: stop },
+      spec: SIMULATION_GOLD_SPEC,
     });
 
     if (!risk.allowed || !risk.lotSize) { blockedByRisk += 1; continue; }
