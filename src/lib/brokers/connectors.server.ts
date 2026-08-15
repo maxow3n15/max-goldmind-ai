@@ -6,7 +6,7 @@
 // AI, risk or execution logic.
 
 import type { SymbolSpec } from "@/lib/services/risk-engine";
-import { resolveConversion, describeConversion, type FxConversion, type FxQuoteFetcher } from "@/lib/services/fx";
+import { resolveConversion, type FxConversion, type FxQuoteFetcher } from "@/lib/services/fx";
 import { oandaFxFetcher, metaapiFxFetcher, bridgeFxFetcher, unavailableFxFetcher } from "@/lib/brokers/fx.server";
 
 export interface BrokerAccountInfo {
