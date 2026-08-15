@@ -100,7 +100,7 @@ describe("administrative live-execution lock", () => {
       spread: 0.2,
     });
     expect(res.ok).toBe(false);
-    expect(res.reason).toMatch(/administratively locked/i);
+    expect(res.ok === false && res.reason).toMatch(/administratively locked/i);
     expect(supabase.inserted).toHaveLength(0);
   });
 
