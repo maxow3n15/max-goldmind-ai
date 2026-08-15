@@ -162,11 +162,15 @@ async function runTickCycle(supabaseAdmin: any) {
       const sumSince = (d: Date) =>
         closed.filter((t: any) => t.closed_at && new Date(t.closed_at) >= d)
           .reduce((a: number, t: any) => a + Number(t.pnl), 0);
-      const snapshot = {
+      const tradingMode: "paper" | "live" = settings.trading_mode === "live" ? "live" : "paper";
+      // Paper mode uses the internal paper account. Broker mode NEVER does —
+      // it is replaced below by the broker's own account state.
+      const snapshot: { account: any; daily_pnl: number; weekly_pnl: number } = {
         account: acct ?? { balance: 10000, equity: 10000, free_margin: 10000, margin_used: 0 },
         daily_pnl: sumSince(dayStart),
         weekly_pnl: sumSince(weekStart),
       };
+
 
       const calibration = buildCalibration(
         closed.map((t: any) => ({ confidence: t.confidence, pnl: t.pnl })),
@@ -197,17 +201,18 @@ async function runTickCycle(supabaseAdmin: any) {
         ? buildManagementPlan({ volatility: quant.volatility, momentum: quant.momentum })
         : null;
 
-      const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
-
       // Reconcile before deciding: any trade whose broker state disagrees with
       // ours is moved out of "open", so the decision pipeline below never sizes
       // or manages against a position we cannot account for.
+      let reconciliationBlocked: string | null = null;
+      let brokerEnvironment: string | null = null;
       if (tradingMode === "live") {
         try {
           const { reconcileUserPositions } = await import("@/lib/services/reconciliation.server");
           const rec = await reconcileUserPositions(supabaseAdmin, userId);
           if (rec.mismatches.length > 0) {
             reconciled += rec.mismatches.length;
+            reconciliationBlocked = `${rec.mismatches.length} unresolved broker/database mismatch(es)`;
             errors.push(
               `reconciliation: ${rec.mismatches.length} mismatch(es) for ${userId} — ${rec.mismatches
                 .map((m) => `${m.trade_id}:${m.kind}`)
@@ -215,15 +220,50 @@ async function runTickCycle(supabaseAdmin: any) {
             );
           }
         } catch (e: any) {
+          reconciliationBlocked = "reconciliation failed";
           console.error(`[tick] reconciliation failed for ${userId}:`, e?.message ?? e);
         }
       }
 
       // Live mode is only actually executable when the user has a healthy
       // default broker whose credentials still decrypt.
-      const { isLiveBrokerConnected } = await import("@/lib/brokers/live-execution.server");
-      const execConnected =
-        tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+      const { isLiveBrokerConnected, loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+        await import("@/lib/brokers/live-execution.server");
+      let execConnected = tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+
+      // Broker mode is sized from the BROKER account, never the paper account.
+      if (tradingMode === "live" && execConnected) {
+        try {
+          const conn = await loadDefaultBrokerConnection(supabaseAdmin, userId);
+          const resolved = await resolveConnectionEnvironment(conn);
+          brokerEnvironment = resolved.env;
+          const { getConnector } = await import("@/lib/brokers/connectors.server");
+          const brokerAccount = await getConnector(conn.broker_id).fetchAccount(resolved.credentials);
+          snapshot.account = {
+            balance: brokerAccount.balance,
+            equity: brokerAccount.equity,
+            free_margin: brokerAccount.free_margin,
+            margin_used: Math.max(0, brokerAccount.equity - brokerAccount.free_margin),
+            currency: brokerAccount.currency,
+            source: `broker:${conn.broker_id}`,
+          };
+          await supabaseAdmin
+            .from("broker_connections")
+            .update({
+              ...brokerAccount,
+              status: "connected",
+              last_error: null,
+              last_sync_at: new Date().toISOString(),
+            })
+            .eq("id", conn.id);
+        } catch (e: any) {
+          // No verified broker account state = no autonomous broker trading.
+          execConnected = false;
+          errors.push(`broker account refresh failed for ${userId.slice(0, 8)}: ${String(e?.message ?? e).slice(0, 140)}`);
+        }
+      }
+
+
 
 
       // Classify first so the environment's own track record can inform the
@@ -309,10 +349,23 @@ async function runTickCycle(supabaseAdmin: any) {
       }
 
       // ---- Open new legs --------------------------------------------------
-      if (decision.action === "open" && !decision.killSwitchTrip && !feedBroken) {
+      const openBlocked =
+        decision.killSwitchTrip ? "kill switch tripped"
+        : feedBroken ? "candle feed unusable"
+        : reconciliationBlocked ? `reconciliation required — ${reconciliationBlocked}`
+        : null;
+      let submitted = 0;
+      const submissionErrors: string[] = [];
+      if (decision.action === "open" && !openBlocked) {
         for (const plan of decision.plans) {
-          const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey, quote?.spread ?? undefined);
-          if (inserted) opened += 1;
+          submitted += 1;
+          try {
+            const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey, quote?.spread ?? undefined);
+            if (inserted) opened += 1;
+            else submissionErrors.push(`${plan.client_order_id ?? "plan"}: not filled`);
+          } catch (e: any) {
+            submissionErrors.push(`${plan.client_order_id ?? "plan"}: ${String(e?.message ?? e).slice(0, 140)}`);
+          }
         }
       }
 
@@ -323,7 +376,7 @@ async function runTickCycle(supabaseAdmin: any) {
         decided_at: new Date().toISOString(),
         symbol: "XAUUSD",
         timeframe,
-        outcome: decision.action === "open" ? "accepted" : "rejected",
+        outcome: decision.action === "open" && !openBlocked ? "accepted" : "rejected",
         direction: analysis?.setup?.direction ?? null,
         confidence: decision.composite?.final ?? analysis?.confidence ?? null,
         technical_score: decision.composite?.technical ?? null,
@@ -332,6 +385,7 @@ async function runTickCycle(supabaseAdmin: any) {
         blockers: [
           ...decision.safety.failingReasons,
           ...(feedBroken ? [`Candle feed unusable: ${structure?.integrity.issues[0] ?? "insufficient data"}`] : []),
+          ...(openBlocked ? [openBlocked] : []),
         ].slice(0, 20),
         price: quote?.mid ?? null,
         spread: quote?.spread ?? null,
@@ -339,12 +393,26 @@ async function runTickCycle(supabaseAdmin: any) {
         payload: {
           source: "cron",
           tier: decision.adaptive.tier,
+          trading_mode: tradingMode,
+          broker_environment: brokerEnvironment,
+          account_source: snapshot.account?.source ?? "paper_account",
+          account_equity: snapshot.account?.equity ?? null,
+          daily_pnl: snapshot.daily_pnl,
+          news_status: macro ? "ok" : "unavailable",
+          news_score: decision.composite?.news ?? null,
+          confidence_components: decision.composite ?? null,
+          timeframe_alignment: structure?.mtf?.alignment ?? null,
+          risk_rejections: decision.safety.failingReasons.slice(0, 6),
+          orders_submitted: submitted,
+          orders_filled: opened,
+          submission_errors: submissionErrors.slice(0, 5),
           feed_integrity: structure?.integrity.status ?? "UNKNOWN",
           feed_issues: structure?.integrity.issues.slice(0, 4) ?? [],
         },
         environment: envKey,
         environment_confidence: decision.environment.regime_confidence,
       }, { onConflict: "user_id,cycle_id", ignoreDuplicates: true });
+
     } catch (e: any) {
       errors.push(`${userId.slice(0, 8)}: ${String(e?.message ?? e).slice(0, 160)}`);
     }

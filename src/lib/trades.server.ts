@@ -16,7 +16,11 @@ export async function checkAccountProtection(
   supabase: any,
   userId: string,
   mode: "paper" | "live",
+  /** Authoritative broker environment, resolved server-side. Defaults to the
+   *  most restrictive interpretation (real money) when not supplied. */
+  environment?: import("@/lib/brokers/environment.server").ExecutionEnvironment,
 ): Promise<ProtectionResult> {
+
   const [{ data: settings }, { data: openRows }] = await Promise.all([
     supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("trades").select("id").eq("user_id", userId).eq("status", "open"),
@@ -33,14 +37,16 @@ export async function checkAccountProtection(
     return { ok: false, reason: `Maximum open positions reached (${openCount}/${maxOpen}).`, ...base };
   }
   if (mode === "live") {
-    // Non-bypassable administrative lock — checked before anything the user
-    // can influence, so no settings change or replayed request gets past it.
-    const { getLiveExecutionLock } = await import("@/lib/live-lock.server");
-    const lock = getLiveExecutionLock();
-    if (lock.locked) return { ok: false, reason: lock.reason!, ...base };
+    // Environment-aware permission gate, checked before anything the user can
+    // influence. Demo/practice may execute; real money is locked by default
+    // and additionally needs explicit user confirmation.
+    const { getExecutionPermission } = await import("@/lib/live-lock.server");
+    const env = environment ?? "broker_live";
+    const permission = getExecutionPermission(env, settings);
+    if (!permission.allowed) return { ok: false, reason: permission.reason!, ...base };
 
-    if (!settings?.live_trading_enabled || settings?.trading_mode !== "live") {
-      return { ok: false, reason: "Live trading is not authorised in settings.", ...base };
+    if (settings?.trading_mode !== "live") {
+      return { ok: false, reason: "Broker execution is not selected in settings.", ...base };
     }
     const { data: conn } = await supabase
       .from("broker_connections")
@@ -53,5 +59,6 @@ export async function checkAccountProtection(
       return { ok: false, reason: `Broker connection is ${conn.status}. Reconnect required.`, ...base };
     }
   }
+
   return { ok: true, ...base };
 }

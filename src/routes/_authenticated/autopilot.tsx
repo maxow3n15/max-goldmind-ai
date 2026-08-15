@@ -5,6 +5,8 @@ import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
 import { ManualOrderTicket } from "@/components/ManualOrderTicket";
+import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
+
 
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
@@ -54,7 +56,9 @@ function Autopilot() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Fully autonomous XAUUSD trader. Analyses, decides, executes, and manages positions.
-            Currently running in <span className="text-[color:var(--gold)] font-medium">paper mode</span> — MT5 execution is a placeholder until the external bridge is deployed.
+            Broker execution is live for <span className="text-[color:var(--gold)] font-medium">demo/practice accounts</span>;
+            real-money execution is implemented but administratively locked.
+
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -100,12 +104,16 @@ function Autopilot() {
                 : "Autopilot is paused."}
           </div>
           <div className="text-xs opacity-80 mt-0.5">
-            The engine keeps running on every page while this tab is open — use the corner widget to pause it or watch live trades. For 24/7 headless operation, deploy the external trading worker.
+            The engine also runs headless on the server every minute, so trades keep being opened and managed with no tab open. Use the corner widget to pause it or watch live trades.
           </div>
         </div>
       </div>
 
+      {/* Authoritative, server-derived execution & arming state */}
+      <ExecutionStatePanel />
+
       {/* Manual order ticket — user-initiated entries, managed like any other */}
+
       <ManualOrderTicket
         mode={(a.settings as any)?.trading_mode === "live" ? "live" : "paper"}
         timeframe={timeframe}
