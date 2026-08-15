@@ -37,7 +37,7 @@ export function oandaFxFetcher(
     } | null;
     const p = body?.prices?.[0];
     if (!p) return null;
-    if (p["tradeable"] === false && !p["closeoutBid"]) return null;
+    const tradeable = p["tradeable"] !== false;
     const bids = p["bids"] as Array<{ price?: unknown }> | undefined;
     const asks = p["asks"] as Array<{ price?: unknown }> | undefined;
     const bid = Number(bids?.[0]?.price ?? p["closeoutBid"]);
@@ -45,7 +45,7 @@ export function oandaFxFetcher(
     const timestamp = parseTime(p["time"]);
 
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || !Number.isFinite(timestamp)) return null;
-    return { pair, bid, ask, timestamp, source: "oanda-pricing" };
+    return { pair, bid, ask, timestamp, source: "oanda-pricing", tradeable };
   };
 }
 
