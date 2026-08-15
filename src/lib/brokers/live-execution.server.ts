@@ -123,7 +123,8 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
   if (!guard.ok) return fail(guard.reason ?? "Blocked by account protection.");
 
   const { getConnector } = await import("@/lib/brokers/connectors.server");
-  const { isUsableSpec, roundVolumeToStep, riskPerLot } = await import("@/lib/services/risk-engine");
+  const { isUsableSpec, specProblem, roundVolumeToStep, riskPerLot } = await import("@/lib/services/risk-engine");
+  const { validateConversion, describeConversion } = await import("@/lib/services/fx");
   const connector = getConnector(conn.broker_id);
 
   // --- 4. Refresh the broker account immediately before sizing -----------
@@ -163,7 +164,16 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
   } catch (e: any) {
     return fail(String(e?.message ?? "Broker symbol specification unavailable").slice(0, 300));
   }
-  if (!isUsableSpec(spec)) return fail("Broker symbol specification is incomplete — sizing refused.");
+  if (!isUsableSpec(spec, Date.now()))
+    return fail(`Broker symbol specification is unusable — ${specProblem(spec, Date.now())}. Sizing refused.`);
+  // The account may be denominated in a different currency to the instrument's
+  // quote currency. All monetary values below are already account-currency,
+  // via this validated conversion.
+  if (spec.accountCurrency !== String(account.currency ?? "").toUpperCase()) {
+    return fail(
+      `Instrument specification is priced for ${spec.accountCurrency} but the account reports ${account.currency} — refusing to size.`,
+    );
+  }
 
   // --- 6. Execution safety gates -----------------------------------------
   if ((data.spread ?? 0) > MAX_SPREAD) return fail(`Spread ${data.spread?.toFixed(2)} above ${MAX_SPREAD} limit.`, "SIGNAL_REJECTED");
@@ -207,7 +217,10 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
     if (spec.marginRate == null) {
       return fail("Broker did not report a margin requirement — cannot verify free margin.");
     }
-    const requiredMargin = data.entry_price * volume * spec.contractSize * spec.marginRate;
+    // Notional is quote-currency; convert into the account currency before
+    // comparing against the broker's account-currency free margin.
+    const requiredMargin =
+      data.entry_price * volume * spec.contractSize * spec.marginRate * spec.conversion.rate;
     if (requiredMargin > freeMargin) {
       return fail(
         `Insufficient free margin: ${requiredMargin.toFixed(2)} required, ${freeMargin.toFixed(2)} available.`,
@@ -226,6 +239,25 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
     if (existing) {
       return fail(`Duplicate execution: ${data.client_order_id} has already been submitted.`, "SIGNAL_REJECTED");
     }
+  }
+
+  // --- 9b. Independent final risk re-derivation, in account currency ------
+  // Recomputed from first principles (size × stop distance × per-point value ×
+  // FX rate) rather than reusing the numbers above, and re-validated for
+  // conversion freshness immediately before the order leaves our systems.
+  const conversionAtExecution = validateConversion(spec.conversion, Date.now());
+  if (!conversionAtExecution.ok) {
+    return fail(
+      `Unable to safely convert ${spec.quoteCurrency} instrument value into ${spec.accountCurrency} account currency — ${conversionAtExecution.reason}`,
+    );
+  }
+  const finalRiskAccountCcy =
+    volume * spec.contractSize * stopDistance * spec.conversion.rate;
+  const finalRiskPct = (finalRiskAccountCcy / Number(account.equity)) * 100;
+  if (!(finalRiskAccountCcy > 0) || finalRiskPct > maxRiskPct + 1e-9) {
+    return fail(
+      `Final risk check failed: ${finalRiskAccountCcy.toFixed(2)} ${spec.accountCurrency} (${finalRiskPct.toFixed(3)}%) against a ${maxRiskPct}% budget.`,
+    );
   }
 
   // --- 10. Submit -----------------------------------------------------
@@ -327,6 +359,11 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
         account_equity_at_entry: Number(account.equity),
         risk_amount: actualRisk,
         risk_pct: actualRiskPct,
+        account_currency: spec.accountCurrency,
+        quote_currency: spec.quoteCurrency,
+        fx_conversion: spec.conversion,
+        fx_conversion_summary: describeConversion(spec.conversion),
+        final_risk_account_currency: Number(finalRiskAccountCcy.toFixed(2)),
         verification: verification.record,
       },
       source: data.source ?? "auto",

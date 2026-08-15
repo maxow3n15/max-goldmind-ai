@@ -11,6 +11,7 @@
 //                         exposure limit that applies.
 
 import type { Direction } from "./types";
+import { identityConversion, validateConversion, type FxConversion } from "./fx";
 
 export interface RiskLimits {
   riskPerTradePct: number;
@@ -47,13 +48,23 @@ export interface SymbolSpec {
   contractSize: number;
   /** Smallest price increment the broker quotes. */
   tickSize: number;
-  /** Account-currency value of one tick for 1.0 lot. */
+  /**
+   * Value of one tick for 1.0 lot, expressed in the ACCOUNT currency.
+   * When the instrument's quote currency differs from the account currency
+   * this value has already been converted with `conversion`.
+   */
   tickValue: number;
   volumeMin: number;
   volumeMax: number;
   volumeStep: number;
   /** Fraction of notional required as margin (0.005 = 200:1). Null when unknown. */
   marginRate: number | null;
+  /** Currency the instrument's P/L accrues in, from the broker (e.g. USD). */
+  quoteCurrency: string;
+  /** Currency the broker account is denominated in (e.g. GBP). */
+  accountCurrency: string;
+  /** Validated quote → account currency conversion behind `tickValue`. */
+  conversion: FxConversion;
   /** Where the spec came from: connector id, or "simulation" for backtests. */
   source: string;
 }
@@ -74,17 +85,41 @@ export function roundVolumeToStep(volume: number, spec: SymbolSpec): number {
   return rounded;
 }
 
-export function isUsableSpec(spec: SymbolSpec | null | undefined): spec is SymbolSpec {
-  return (
-    !!spec &&
-    Number.isFinite(spec.contractSize) && spec.contractSize > 0 &&
-    Number.isFinite(spec.tickSize) && spec.tickSize > 0 &&
-    Number.isFinite(spec.tickValue) && spec.tickValue > 0 &&
-    Number.isFinite(spec.volumeMin) && spec.volumeMin > 0 &&
-    Number.isFinite(spec.volumeMax) && spec.volumeMax >= spec.volumeMin &&
-    Number.isFinite(spec.volumeStep) && spec.volumeStep > 0
-  );
+/** Why a spec is unusable, or null when it is safe to size from. */
+export function specProblem(
+  spec: SymbolSpec | null | undefined,
+  now?: number,
+): string | null {
+  if (!spec) return "no broker symbol specification";
+  const numeric: Array<[string, number | undefined]> = [
+    ["contract size", spec.contractSize],
+    ["tick size", spec.tickSize],
+    ["tick value", spec.tickValue],
+    ["minimum volume", spec.volumeMin],
+    ["volume step", spec.volumeStep],
+  ];
+  for (const [label, v] of numeric) {
+    if (!Number.isFinite(Number(v)) || Number(v) <= 0) return `broker did not report a usable ${label}`;
+  }
+  if (!Number.isFinite(spec.volumeMax) || spec.volumeMax < spec.volumeMin)
+    return "broker did not report a usable maximum volume";
+  if (!spec.quoteCurrency || !spec.accountCurrency) return "instrument or account currency is unknown";
+  const conversion = spec.conversion;
+  if (!conversion) return "no validated FX conversion for this instrument";
+  if (conversion.from !== spec.quoteCurrency || conversion.to !== spec.accountCurrency)
+    return `FX conversion ${conversion.from}→${conversion.to} does not match ${spec.quoteCurrency}→${spec.accountCurrency}`;
+  const v = validateConversion(conversion, now ?? Date.now());
+  if (!v.ok) return v.reason ?? "FX conversion could not be verified";
+  return null;
 }
+
+export function isUsableSpec(
+  spec: SymbolSpec | null | undefined,
+  now?: number,
+): spec is SymbolSpec {
+  return specProblem(spec, now) === null;
+}
+
 
 export interface RiskInput {
   now: number;
@@ -160,6 +195,9 @@ export const SIMULATION_GOLD_SPEC: SymbolSpec = {
   volumeMax: 100,
   volumeStep: 0.01,
   marginRate: null,
+  quoteCurrency: "USD",
+  accountCurrency: "USD",
+  conversion: identityConversion("USD"),
   source: "simulation",
 };
 
@@ -287,13 +325,13 @@ export function assessRisk(input: RiskInput): RiskAssessment {
   let actualRiskPct: number | null = null;
   if (input.proposal) {
     const spec = input.spec;
-    if (!isUsableSpec(spec)) {
+    if (!isUsableSpec(spec, now)) {
       // Fail safe: no verified contract size / tick value / volume rules means
       // we cannot size the trade honestly. Never assume a gold contract.
       block(
         "symbol_spec",
         "Broker symbol specification unavailable",
-        "contract size, tick value and volume rules could not be sourced from the broker",
+        specProblem(spec, now) ?? "contract size, tick value and volume rules could not be sourced from the broker",
       );
     } else {
       const stopDistance = Math.abs(input.proposal.entry - input.proposal.stop_loss);

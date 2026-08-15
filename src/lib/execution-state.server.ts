@@ -249,11 +249,13 @@ export async function runPracticeExecutionTest(
   try {
     if (!connector.fetchSymbolSpec) throw new Error("connector cannot supply an instrument specification");
     const spec = await connector.fetchSymbolSpec(resolved.credentials, "XAUUSD");
+    const { describeConversion } = await import("@/lib/services/fx");
     add(
       "instrument",
       true,
-      `${spec.symbol}: contract ${spec.contractSize}, step ${spec.volumeStep}, min ${spec.volumeMin}, margin ${spec.marginRate ?? "n/a"}`,
+      `${spec.symbol}: contract ${spec.contractSize}, step ${spec.volumeStep}, min ${spec.volumeMin}, margin ${spec.marginRate ?? "n/a"}, tick value ${spec.tickValue} ${spec.accountCurrency} — ${describeConversion(spec.conversion)}`,
     );
+
   } catch (e: any) {
     add("instrument", false, String(e?.message ?? e).slice(0, 200));
     return { ok: false, environment: resolved.env, steps };

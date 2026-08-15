@@ -6,6 +6,8 @@
 // AI, risk or execution logic.
 
 import type { SymbolSpec } from "@/lib/services/risk-engine";
+import { resolveConversion, type FxConversion, type FxQuoteFetcher } from "@/lib/services/fx";
+import { oandaFxFetcher, metaapiFxFetcher, bridgeFxFetcher, unavailableFxFetcher } from "@/lib/brokers/fx.server";
 
 export interface BrokerAccountInfo {
   account_name: string | null;
@@ -90,6 +92,31 @@ function reqNum(v: unknown, field: string, label: string): number {
 }
 
 
+/**
+ * Resolve the instrument's quote currency into the account currency using the
+ * broker's own price feed. Refuses (throws) when no validated rate exists —
+ * a trade is never sized on an assumed or stale conversion.
+ */
+async function accountConversion(
+  label: string,
+  quoteCurrency: string,
+  accountCurrency: string,
+  fetchQuote: FxQuoteFetcher,
+): Promise<FxConversion> {
+  const q = (quoteCurrency ?? "").toUpperCase();
+  const a = (accountCurrency ?? "").toUpperCase();
+  if (!q || !a) {
+    throw new Error(`${label}: instrument or account currency unknown — tick value cannot be derived safely`);
+  }
+  const res = await resolveConversion({ from: q, to: a, fetchQuote, now: Date.now() });
+  if (!res.ok) {
+    throw new Error(
+      `${label}: unable to safely convert ${q} instrument value into ${a} account currency — ${res.reason}`,
+    );
+  }
+  return res.conversion;
+}
+
 async function req(url: string, init: RequestInit & { label: string }): Promise<any> {
   const { label, ...rest } = init;
   let res: Response;
@@ -160,11 +187,12 @@ const metaapi: BrokerConnector = {
     });
     const accountCurrency = String(info.currency ?? "").toUpperCase();
     const profitCurrency = String(spec.quoteCurrency ?? spec.profitCurrency ?? "").toUpperCase();
-    if (!accountCurrency || !profitCurrency || accountCurrency !== profitCurrency) {
-      throw new Error(
-        `${label}: symbol profit currency ${profitCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
-      );
-    }
+    const conversion = await accountConversion(
+      label,
+      profitCurrency,
+      accountCurrency,
+      metaapiFxFetcher(base, String(c["accountId"] ?? ""), metaapiHeaders(c)),
+    );
     const contractSize = reqNum(spec.contractSize, "contractSize", label);
     const tickSize = reqNum(spec.tickSize ?? (spec.digits != null ? Math.pow(10, -Number(spec.digits)) : undefined), "tickSize", label);
     const leverage = Number(info.leverage);
@@ -172,11 +200,14 @@ const metaapi: BrokerConnector = {
       symbol: sym,
       contractSize,
       tickSize,
-      tickValue: tickSize * contractSize,
+      tickValue: tickSize * contractSize * conversion.rate,
       volumeMin: reqNum(spec.minVolume, "minVolume", label),
       volumeMax: reqNum(spec.maxVolume, "maxVolume", label),
       volumeStep: reqNum(spec.volumeStep, "volumeStep", label),
       marginRate: Number.isFinite(leverage) && leverage > 0 ? 1 / leverage : null,
+      quoteCurrency: profitCurrency,
+      accountCurrency,
+      conversion,
       source: "metaapi",
     };
   },
@@ -283,11 +314,15 @@ const oanda: BrokerConnector = {
     if (!i) throw new Error(`${label}: instrument ${instrument} not available on this account`);
     const quoteCurrency = String(instrument.split("_")[1] ?? "").toUpperCase();
     const accountCurrency = String(summary.account?.currency ?? "").toUpperCase();
-    if (!quoteCurrency || quoteCurrency !== accountCurrency) {
-      throw new Error(
-        `${label}: instrument quote currency ${quoteCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
-      );
-    }
+    // XAU_USD accrues P/L in USD; the account may be denominated in anything
+    // OANDA supports. Convert with a live, validated rate from this account's
+    // own pricing feed — never an assumed parity.
+    const conversion = await accountConversion(
+      label,
+      quoteCurrency,
+      accountCurrency,
+      oandaFxFetcher(base, String(c["accountId"] ?? ""), oandaHeaders(c)),
+    );
     // OANDA prices per unit (1 unit = 1 oz for XAU_USD); this connector's
     // "lot" is UNITS_PER_LOT units, matching how placeOrder converts volume.
     const unitsPerLot = OANDA_UNITS_PER_LOT;
@@ -302,11 +337,14 @@ const oanda: BrokerConnector = {
       symbol: instrument,
       contractSize: unitsPerLot,
       tickSize,
-      tickValue: tickSize * unitsPerLot,
+      tickValue: tickSize * unitsPerLot * conversion.rate,
       volumeMin: reqNum(i.minimumTradeSize, "minimumTradeSize", label) / unitsPerLot,
       volumeMax: reqNum(i.maximumOrderUnits, "maximumOrderUnits", label) / unitsPerLot,
       volumeStep: Math.pow(10, -tradeUnitsPrecision) / unitsPerLot,
       marginRate: Number.isFinite(marginRate) && marginRate > 0 ? marginRate : null,
+      quoteCurrency,
+      accountCurrency,
+      conversion,
       source: "oanda",
     };
   },
@@ -468,11 +506,14 @@ const capital: BrokerConnector = {
     const instrumentCurrency = String(
       inst.currency ?? (Array.isArray(inst.currencies) ? inst.currencies[0]?.code : undefined) ?? "",
     ).toUpperCase();
-    if (!accountCurrency || !instrumentCurrency || accountCurrency !== instrumentCurrency) {
-      throw new Error(
-        `${label}: instrument currency ${instrumentCurrency || "unknown"} differs from account currency ${accountCurrency || "unknown"} — tick value cannot be derived safely`,
-      );
-    }
+    // Capital.com exposes no currency-pair price feed on this API surface, so
+    // a cross-currency instrument cannot be converted and is refused.
+    const conversion = await accountConversion(
+      label,
+      instrumentCurrency,
+      accountCurrency,
+      unavailableFxFetcher,
+    );
     const contractSize = reqNum(inst.lotSize, "lotSize", label);
     const decimals = reqNum(m.snapshot?.decimalPlacesFactor, "decimalPlacesFactor", label);
     const tickSize = Math.pow(10, -decimals);
@@ -485,11 +526,14 @@ const capital: BrokerConnector = {
       symbol: epic,
       contractSize,
       tickSize,
-      tickValue: tickSize * contractSize,
+      tickValue: tickSize * contractSize * conversion.rate,
       volumeMin: reqNum(rules.minDealSize?.value, "minDealSize", label),
       volumeMax: reqNum(rules.maxDealSize?.value, "maxDealSize", label),
       volumeStep: reqNum(rules.minSizeIncrement?.value, "minSizeIncrement", label),
       marginRate,
+      quoteCurrency: instrumentCurrency,
+      accountCurrency,
+      conversion,
       source: "capital",
     };
   },
@@ -669,22 +713,45 @@ const bridge: BrokerConnector = {
       label,
       headers: bridgeHeaders(c),
     });
+    const acct = await req(`${base}/account`, { label: "Bridge account", headers: bridgeHeaders(c) });
+    const accountCurrency = String(acct.currency ?? "").toUpperCase();
+    const quoteCurrency = String(
+      spec.quote_currency ?? spec.quoteCurrency ?? spec.profit_currency ?? spec.profitCurrency ?? "",
+    ).toUpperCase();
+    const conversion = await accountConversion(
+      label,
+      quoteCurrency,
+      accountCurrency,
+      bridgeFxFetcher(base, bridgeHeaders(c)),
+    );
     const contractSize = reqNum(spec.contract_size ?? spec.contractSize, "contract_size", label);
     const tickSize = reqNum(spec.tick_size ?? spec.tickSize, "tick_size", label);
-    const tickValue = Number(spec.tick_value ?? spec.tickValue);
+    // A bridge-reported tick value is only usable when it is already stated in
+    // the account currency; otherwise derive and convert it ourselves.
+    const reportedTickCurrency = String(
+      spec.tick_value_currency ?? spec.tickValueCurrency ?? accountCurrency,
+    ).toUpperCase();
+    const rawTickValue = Number(spec.tick_value ?? spec.tickValue);
+    const tickValue =
+      Number.isFinite(rawTickValue) && rawTickValue > 0 && reportedTickCurrency === accountCurrency
+        ? rawTickValue
+        : tickSize * contractSize * conversion.rate;
     const marginRate = Number(spec.margin_rate ?? spec.marginRate);
     const leverage = Number(spec.leverage);
     return {
       symbol: sym,
       contractSize,
       tickSize,
-      tickValue: Number.isFinite(tickValue) && tickValue > 0 ? tickValue : tickSize * contractSize,
+      tickValue,
       volumeMin: reqNum(spec.volume_min ?? spec.volumeMin, "volume_min", label),
       volumeMax: reqNum(spec.volume_max ?? spec.volumeMax, "volume_max", label),
       volumeStep: reqNum(spec.volume_step ?? spec.volumeStep, "volume_step", label),
       marginRate: Number.isFinite(marginRate) && marginRate > 0
         ? marginRate
         : Number.isFinite(leverage) && leverage > 0 ? 1 / leverage : null,
+      quoteCurrency,
+      accountCurrency,
+      conversion,
       source: "bridge",
     };
   },
