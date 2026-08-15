@@ -111,23 +111,25 @@ async function build(): Promise<MacroReport> {
     bullish_drivers: Array.isArray(p.bullish_drivers) ? p.bullish_drivers.map(String) : [],
     bearish_drivers: Array.isArray(p.bearish_drivers) ? p.bearish_drivers.map(String) : [],
     headlines,
-    upcoming_events: events.slice(0, 6).map((e: any) => ({
-      name: String(e?.name ?? "Event"),
-      when: String(e?.when ?? ""),
-      hours_away: e?.hours_away == null ? null : Number(e.hours_away),
-      impact: (["high", "medium", "low"].includes(e?.impact) ? e.impact : "low") as any,
-      expectation: e?.expectation ? String(e.expectation) : null,
-      priced_in: !!e?.priced_in,
+    // Event timing comes from the deterministic calendar, never from the
+    // model: a language model has no clock, so anything it says about "hours
+    // away" is invention — and this field gates real execution.
+    upcoming_events: calendar.upcoming.slice(0, 6).map((e) => ({
+      name: e.name,
+      when: new Date(e.at).toISOString(),
+      hours_away: Number((e.minutesAway / 60).toFixed(2)),
+      impact: e.impact as any,
+      expectation: e.estimated ? "Timing estimated from the usual release window" : null,
+      priced_in: false,
     })),
-    blackout: imminent
-      ? {
-          active: true,
-          reason: `High-impact release within ${Math.round(Number(imminent.hours_away) * 60)} minutes`,
-          event: String(imminent.name),
-          minutes_away: Math.round(Number(imminent.hours_away) * 60),
-        }
-      : { active: false, reason: null, event: null, minutes_away: null },
-    post_event_wait: !!p.post_event_high_impact_within_60min,
+    blackout: {
+      active: calendar.blackout.active,
+      reason: calendar.blackout.reason ?? calendar.caution,
+      event: calendar.blackout.event,
+      minutes_away: calendar.blackout.minutesAway,
+    },
+    post_event_wait: calendar.blackout.postEvent,
+
   };
 }
 
