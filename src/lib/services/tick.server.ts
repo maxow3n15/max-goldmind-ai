@@ -198,11 +198,32 @@ async function runTickCycle(supabaseAdmin: any) {
 
       const tradingMode = settings.trading_mode === "live" ? "live" : "paper";
 
+      // Reconcile before deciding: any trade whose broker state disagrees with
+      // ours is moved out of "open", so the decision pipeline below never sizes
+      // or manages against a position we cannot account for.
+      if (tradingMode === "live") {
+        try {
+          const { reconcileUserPositions } = await import("@/lib/services/reconciliation.server");
+          const rec = await reconcileUserPositions(supabaseAdmin, userId);
+          if (rec.mismatches.length > 0) {
+            reconciled += rec.mismatches.length;
+            errors.push(
+              `reconciliation: ${rec.mismatches.length} mismatch(es) for ${userId} — ${rec.mismatches
+                .map((m) => `${m.trade_id}:${m.kind}`)
+                .join(", ")}`,
+            );
+          }
+        } catch (e: any) {
+          console.error(`[tick] reconciliation failed for ${userId}:`, e?.message ?? e);
+        }
+      }
+
       // Live mode is only actually executable when the user has a healthy
       // default broker whose credentials still decrypt.
       const { isLiveBrokerConnected } = await import("@/lib/brokers/live-execution.server");
       const execConnected =
         tradingMode === "paper" ? true : await isLiveBrokerConnected(supabaseAdmin, userId);
+
 
       // Classify first so the environment's own track record can inform the
       // adaptive policy in the very same cycle.
