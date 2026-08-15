@@ -65,6 +65,12 @@ export async function placeLiveOrderCore(
 ) {
   const fail = (reason: string) => ({ ok: false as const, reason });
 
+  // Hard administrative lock, checked first and independently of the account
+  // protection gate so neither path can be the single point of failure.
+  const { getLiveExecutionLock } = await import("@/lib/live-lock.server");
+  const lock = getLiveExecutionLock();
+  if (lock.locked) return fail(lock.reason!);
+
   const { checkAccountProtection } = await import("@/lib/trades.server");
   const guard = await checkAccountProtection(supabase, userId, "live");
   if (!guard.ok) return fail(guard.reason ?? "Blocked by account protection.");
