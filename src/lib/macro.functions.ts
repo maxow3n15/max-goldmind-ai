@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { callChat } from "./ai-gateway.server";
 import { fetchHeadlines } from "./news.server";
+import { readEconomicCalendar } from "./services/economic-calendar";
 import type { MacroReport } from "./services/macro.types";
 
 const SYSTEM = `You are GoldMind AI's macro desk: a senior gold (XAUUSD) fundamental analyst.
@@ -38,6 +39,9 @@ let cache: Cached | null = null;
 const TTL_MS = 5 * 60_000;
 
 function neutral(reason: string): MacroReport {
+  // Event risk does not depend on the news feed, so the deterministic
+  // calendar still applies even when the macro model is unavailable.
+  const calendar = readEconomicCalendar(Date.now());
   return {
     generated_at: Date.now(),
     news_score: 50,
@@ -52,9 +56,22 @@ function neutral(reason: string): MacroReport {
     bullish_drivers: [],
     bearish_drivers: [],
     headlines: [],
-    upcoming_events: [],
-    blackout: { active: false, reason: null, event: null, minutes_away: null },
-    post_event_wait: false,
+    upcoming_events: calendar.upcoming.slice(0, 6).map((e) => ({
+      name: e.name,
+      when: new Date(e.at).toISOString(),
+      hours_away: Number((e.minutesAway / 60).toFixed(2)),
+      impact: e.impact as any,
+      expectation: e.estimated ? "Timing estimated from the usual release window" : null,
+      priced_in: false,
+    })),
+    blackout: {
+      active: calendar.blackout.active,
+      reason: calendar.blackout.reason,
+      event: calendar.blackout.event,
+      minutes_away: calendar.blackout.minutesAway,
+    },
+    post_event_wait: calendar.blackout.postEvent,
+
     degraded: true,
   };
 }
@@ -82,10 +99,8 @@ async function build(): Promise<MacroReport> {
   let p: any;
   try { p = JSON.parse(raw); } catch { return neutral("model returned unparseable output"); }
 
-  const events = Array.isArray(p.upcoming_events) ? p.upcoming_events : [];
-  const imminent = events.find(
-    (e: any) => e?.impact === "high" && typeof e.hours_away === "number" && e.hours_away >= 0 && e.hours_away <= 1,
-  );
+  // Deterministic event risk, computed here rather than asked of the model.
+  const calendar = readEconomicCalendar(Date.now());
 
   const byUrl = new Map(news.map((n) => [n.title.toLowerCase().slice(0, 50), n.url]));
   const headlines = (Array.isArray(p.headlines) ? p.headlines : []).slice(0, 10).map((h: any) => ({
@@ -111,23 +126,25 @@ async function build(): Promise<MacroReport> {
     bullish_drivers: Array.isArray(p.bullish_drivers) ? p.bullish_drivers.map(String) : [],
     bearish_drivers: Array.isArray(p.bearish_drivers) ? p.bearish_drivers.map(String) : [],
     headlines,
-    upcoming_events: events.slice(0, 6).map((e: any) => ({
-      name: String(e?.name ?? "Event"),
-      when: String(e?.when ?? ""),
-      hours_away: e?.hours_away == null ? null : Number(e.hours_away),
-      impact: (["high", "medium", "low"].includes(e?.impact) ? e.impact : "low") as any,
-      expectation: e?.expectation ? String(e.expectation) : null,
-      priced_in: !!e?.priced_in,
+    // Event timing comes from the deterministic calendar, never from the
+    // model: a language model has no clock, so anything it says about "hours
+    // away" is invention — and this field gates real execution.
+    upcoming_events: calendar.upcoming.slice(0, 6).map((e) => ({
+      name: e.name,
+      when: new Date(e.at).toISOString(),
+      hours_away: Number((e.minutesAway / 60).toFixed(2)),
+      impact: e.impact as any,
+      expectation: e.estimated ? "Timing estimated from the usual release window" : null,
+      priced_in: false,
     })),
-    blackout: imminent
-      ? {
-          active: true,
-          reason: `High-impact release within ${Math.round(Number(imminent.hours_away) * 60)} minutes`,
-          event: String(imminent.name),
-          minutes_away: Math.round(Number(imminent.hours_away) * 60),
-        }
-      : { active: false, reason: null, event: null, minutes_away: null },
-    post_event_wait: !!p.post_event_high_impact_within_60min,
+    blackout: {
+      active: calendar.blackout.active,
+      reason: calendar.blackout.reason ?? calendar.caution,
+      event: calendar.blackout.event,
+      minutes_away: calendar.blackout.minutesAway,
+    },
+    post_event_wait: calendar.blackout.postEvent,
+
   };
 }
 

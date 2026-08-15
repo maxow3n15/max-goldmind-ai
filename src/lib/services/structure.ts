@@ -47,6 +47,38 @@ export interface LiquidityLevel {
   swept: boolean;
 }
 
+/**
+ * A swing pivot whose liquidity was taken and then rejected. This is the
+ * signature that distinguishes a stop-run from a genuine break: price pierces
+ * the pivot, then closes back on the origin side within a few candles.
+ */
+export interface SwingSweep {
+  index: number;
+  t: number;
+  /** The pivot price that was taken. */
+  level: number;
+  side: "buy_side" | "sell_side";
+  penetration: number;
+  /** True when price closed back inside the range after piercing. */
+  reclaimed: boolean;
+}
+
+/**
+ * A failed order block: an OB that price closed decisively through. Once
+ * violated it flips polarity and becomes support/resistance in the other
+ * direction.
+ */
+export interface BreakerBlock {
+  index: number;
+  t: number;
+  /** Direction the breaker now supports (opposite of the failed OB). */
+  direction: "bullish" | "bearish";
+  top: number;
+  bottom: number;
+  /** True once price has traded back into the breaker since it formed. */
+  retested: boolean;
+}
+
 export interface StructureRead {
   bias: StructureBias;
   /** Last structural event, most recent first. */
@@ -55,6 +87,10 @@ export interface StructureRead {
   swingLows: SwingPoint[];
   fvgs: FairValueGap[];
   orderBlocks: OrderBlock[];
+  /** Recent stop-runs on swing pivots, newest first. */
+  sweeps: SwingSweep[];
+  /** Violated order blocks that have flipped polarity, newest first. */
+  breakers: BreakerBlock[];
   /** 0..1 position of price inside the dealing range (0 = discount low). */
   rangePosition: number | null;
   equilibrium: number | null;
@@ -73,6 +109,8 @@ const EMPTY: StructureRead = {
   swingLows: [],
   fvgs: [],
   orderBlocks: [],
+  sweeps: [],
+  breakers: [],
   rangePosition: null,
   equilibrium: null,
   premiumDiscount: null,
@@ -80,6 +118,7 @@ const EMPTY: StructureRead = {
   equalHighs: [],
   equalLows: [],
   lastPrice: null,
+
   atr: null,
 };
 
@@ -223,6 +262,7 @@ export function readStructure(candles: Candle[]): StructureRead {
   const displacement = a != null && Math.abs(lastCandle.c - lastCandle.o) > a * 1.3;
 
   const tol = (a ?? lastPrice * 0.0004) * 0.35;
+  const obs = findOrderBlocks(candles, a);
 
   return {
     bias: trend,
@@ -230,7 +270,9 @@ export function readStructure(candles: Candle[]): StructureRead {
     swingHighs: recentHighs,
     swingLows: recentLows,
     fvgs: findFvgs(candles).slice(-12),
-    orderBlocks: findOrderBlocks(candles, a).slice(-12),
+    orderBlocks: obs.slice(-12),
+    sweeps: findSweeps(candles, highs, lows).slice(-6).reverse(),
+    breakers: findBreakers(candles, obs).slice(-6).reverse(),
     rangePosition: rangePosition == null ? null : Number(rangePosition.toFixed(3)),
     equilibrium: equilibrium == null ? null : Number(equilibrium.toFixed(2)),
     premiumDiscount,
@@ -241,6 +283,76 @@ export function readStructure(candles: Candle[]): StructureRead {
     atr: a,
   };
 }
+
+/**
+ * Stop-runs on swing pivots. A sweep is recorded when a later candle trades
+ * beyond a confirmed pivot; `reclaimed` marks the ones that closed back
+ * inside within `confirmBars`, which is the reversal-grade signature.
+ */
+export function findSweeps(
+  candles: Candle[],
+  highs: SwingPoint[],
+  lows: SwingPoint[],
+  confirmBars = 3,
+): SwingSweep[] {
+  const out: SwingSweep[] = [];
+  const scan = (pivots: SwingPoint[], side: SwingSweep["side"]) => {
+    for (const p of pivots.slice(-8)) {
+      for (let k = p.index + 2; k < candles.length; k++) {
+        const c = candles[k];
+        const pierced = side === "buy_side" ? c.h > p.price : c.l < p.price;
+        if (!pierced) continue;
+        const window = candles.slice(k, k + confirmBars + 1);
+        const reclaimed = side === "buy_side"
+          ? window.some((x) => x.c < p.price)
+          : window.some((x) => x.c > p.price);
+        out.push({
+          index: k,
+          t: c.t,
+          level: Number(p.price.toFixed(2)),
+          side,
+          penetration: Number(Math.abs((side === "buy_side" ? c.h : c.l) - p.price).toFixed(2)),
+          reclaimed,
+        });
+        break;
+      }
+    }
+  };
+  scan(highs, "buy_side");
+  scan(lows, "sell_side");
+  return out.sort((x, y) => x.index - y.index);
+}
+
+/**
+ * Order blocks price closed decisively through. The failed block flips
+ * polarity: a bullish OB broken to the downside becomes bearish resistance.
+ */
+export function findBreakers(candles: Candle[], blocks: OrderBlock[]): BreakerBlock[] {
+  const out: BreakerBlock[] = [];
+  for (const ob of blocks) {
+    for (let k = ob.index + 2; k < candles.length; k++) {
+      const c = candles[k];
+      const broken = ob.direction === "bullish" ? c.c < ob.bottom : c.c > ob.top;
+      if (!broken) continue;
+      const flipped = ob.direction === "bullish" ? "bearish" : "bullish";
+      const after = candles.slice(k + 1);
+      const retested = flipped === "bearish"
+        ? after.some((x) => x.h >= ob.bottom)
+        : after.some((x) => x.l <= ob.top);
+      out.push({
+        index: k,
+        t: c.t,
+        direction: flipped,
+        top: Number(ob.top.toFixed(2)),
+        bottom: Number(ob.bottom.toFixed(2)),
+        retested,
+      });
+      break;
+    }
+  }
+  return out.sort((x, y) => x.index - y.index);
+}
+
 
 /**
  * Reference liquidity levels derived from daily/weekly candles plus the

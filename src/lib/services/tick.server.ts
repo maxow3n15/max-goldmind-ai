@@ -137,8 +137,20 @@ async function runTickCycle(supabaseAdmin: any) {
             analysis = cached;
           } else {
             const { runMarketAnalysis } = await import("@/lib/ai-analysis.server");
+            const { buildEvidence } = await import("@/lib/ai-context.server");
             try {
-              analysis = await runMarketAnalysis({ timeframe, price: quote.mid, session, userId, source: "tick" });
+              // The model only ever sees platform-computed facts.
+              const evidence = await buildEvidence({
+                timeframe,
+                price: quote.mid,
+                quant: quant ?? null,
+                macro,
+                structure: structure ?? null,
+              }).catch(() => null);
+              analysis = await runMarketAnalysis({
+                timeframe, price: quote.mid, session, userId, source: "tick", evidence,
+              });
+
               if (analysis) analysisByState.set(stateKey, analysis);
             } catch {
               analysis = null;

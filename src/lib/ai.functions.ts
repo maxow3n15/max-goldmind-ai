@@ -15,13 +15,31 @@ export const analyzeMarket = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => AnalyzeInput.parse(d))
   .handler(async ({ data, context }) => {
     const { runMarketAnalysis } = await import("./ai-analysis.server");
+    const { buildEvidence } = await import("./ai-context.server");
+
+    // Same deterministic brief the scheduled tick uses, so a manual analysis
+    // and an automated one reason about identical facts.
+    const price = Number(data.price);
+    let evidence = null;
+    if (Number.isFinite(price) && price > 0) {
+      const { buildQuantIntel } = await import("./quant.server");
+      const { buildMacroReport } = await import("./macro.functions");
+      const [quant, macro] = await Promise.all([
+        buildQuantIntel(data.timeframe, null).catch(() => null),
+        buildMacroReport().catch(() => null),
+      ]);
+      evidence = await buildEvidence({ timeframe: data.timeframe, price, quant, macro }).catch(() => null);
+    }
+
     const parsed = await runMarketAnalysis({
       timeframe: data.timeframe,
       price: data.price,
       session: data.session,
       userId: context.userId,
       source: "analysis",
+      evidence,
     });
+
 
     const { error } = await context.supabase.from("ai_analyses").insert({
       user_id: context.userId,

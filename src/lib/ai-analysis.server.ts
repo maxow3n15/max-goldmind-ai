@@ -6,9 +6,18 @@ import { newTelemetry, recordAiHealth } from "./ai-health.server";
 import { clampConfidence, validateSetup } from "./services/setup-validation";
 
 export const ANALYSIS_SYSTEM_PROMPT = `You are GoldMind AI, a senior XAUUSD (Gold) analyst trained in Smart Money / ICT concepts.
-Analyze XAUUSD using: market structure (BOS/CHOCH, internal & external), liquidity (sweeps, equal highs/lows, PDH/PDL, PWH/PWL), premium/discount, fair value gaps, order blocks, breaker & mitigation blocks, supply/demand, swing points, Fibonacci, ATR, session context (Asian/London/NY).
 
-You are cautious and NEVER guarantee outcomes. Every setup includes a confidence score and clear reasoning. If no A+ setup exists, say so and return setup_available=false with setup=null — a skipped trade is better than a forced one.
+CRITICAL — SOURCE OF TRUTH
+The user message contains a DETERMINISTIC EVIDENCE block computed by the platform from real OHLCV data: multi-timeframe structure (BOS/CHOCH, FVGs, order blocks, breakers, sweeps, premium/discount), reference liquidity levels, session ranges, quantitative modules, the economic calendar and the macro read. That block is the ONLY factual input you have. You cannot see a chart and you have no market data of your own.
+- Reason strictly from the evidence block. Never assert a level, pattern, indicator value or event that is not in it.
+- Every claim in your explanation must be traceable to a line of the evidence block.
+- If the evidence block lists any DATA GAPS, you MUST return setup_available=false and setup=null.
+- If the evidence does not contain a clean, high-quality confluence, return setup_available=false. A skipped trade is better than a forced one.
+
+Interpret the evidence using: market structure (BOS/CHOCH, internal & external), liquidity (sweeps, equal highs/lows, PDH/PDL, session highs/lows), premium/discount positioning, fair value gaps, order blocks, breaker & mitigation blocks, ATR-based invalidation, and session context (Asian/London/NY).
+
+You are cautious and NEVER guarantee outcomes. Every setup includes a confidence score and clear reasoning grounded in the evidence.
+
 
 Hard rules for any setup you return:
 - Entry must be within 1% of the reference spot price given by the user; it must be tradeable right now.
@@ -58,6 +67,12 @@ function parseJsonObject(raw: string): any {
   }
 }
 
+export interface AnalysisEvidence {
+  text: string;
+  insufficient: boolean;
+  insufficientReasons: string[];
+}
+
 export async function runMarketAnalysis(opts: {
   timeframe: string;
   price?: number;
@@ -65,6 +80,11 @@ export async function runMarketAnalysis(opts: {
   /** When present, every call outcome is logged to the AI health panel. */
   userId?: string | null;
   source?: string;
+  /**
+   * Deterministic evidence brief from ai-context.server. Strongly recommended:
+   * without it the model has no facts to reason from and can only guess.
+   */
+  evidence?: AnalysisEvidence | null;
 }): Promise<any> {
   const telemetry = newTelemetry();
   const source = opts.source ?? "analysis";
@@ -77,11 +97,40 @@ export async function runMarketAnalysis(opts: {
     throw new Error(msg);
   }
 
+  const evidence = opts.evidence ?? null;
+
+  // Hard gap: refuse before spending a model call. A setup built on top of a
+  // known data hole is worse than no setup, and the model would happily
+  // produce one if asked.
+  if (evidence?.insufficient) {
+    await recordAiHealth({
+      userId: opts.userId, source, status: "validation_reject", telemetry,
+      error: evidence.insufficientReasons[0],
+    });
+    return {
+      bias: "neutral",
+      confidence: 0,
+      market_structure: "Not assessed — deterministic evidence incomplete.",
+      liquidity: "Not assessed.",
+      session_context: opts.session ?? "unknown",
+      setup_available: false,
+      setup: null,
+      explanation: `Analysis skipped: ${evidence.insufficientReasons.join(" ")}`,
+      invalidation: "n/a",
+      reference_price: price,
+      evidence_gaps: evidence.insufficientReasons,
+      skipped: true,
+    };
+  }
+
   const user = `Analyze XAUUSD right now on the ${opts.timeframe} timeframe.
 Reference spot price: ${price.toFixed(2)} USD/oz (this is live — all levels must be built around it).
 Current session: ${opts.session ?? "unknown"}.
-Consider higher-timeframe context (4H / Daily) as well as the requested timeframe.
-Return JSON only.`;
+
+${evidence?.text ?? "=== DETERMINISTIC EVIDENCE ===\n(unavailable this cycle — you have no verified structural data, so you MUST return setup_available=false)\n=== END EVIDENCE ==="}
+
+Interpret the evidence above and return JSON only.`;
+
 
   let raw: string;
   try {
@@ -122,6 +171,17 @@ Return JSON only.`;
   parsed.setup = setup;
   parsed.setup_available = !!setup;
   parsed.reference_price = price;
+  parsed.evidence_provided = !!evidence;
+
+  // Belt and braces: a setup produced without deterministic evidence is an
+  // unsourced guess, whatever the model claimed. Drop it rather than let it
+  // reach sizing.
+  if (!evidence && parsed.setup) {
+    rejections.push("Setup discarded: produced without a deterministic evidence brief.");
+    parsed.setup = null;
+    parsed.setup_available = false;
+  }
+
   if (rejections.length > 0) {
     parsed.setup_rejections = rejections;
     parsed.explanation = `${parsed.explanation ?? ""} ${rejections[0]}`.trim();
