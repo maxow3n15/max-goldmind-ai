@@ -6,6 +6,13 @@
 // modes is a factory swap. We NEVER fake a successful live order.
 
 import type { ExecutionEngine, TradePlan } from "./types";
+import {
+  riskPerLot,
+  roundVolumeToStep,
+  SIMULATION_GOLD_SPEC,
+  type SymbolSpec,
+} from "./risk-engine";
+
 import { signalWindow, SIGNAL_TTL_MS } from "./signal";
 import { openPaperTrade, closePaperTrade } from "@/lib/trades.functions";
 import { updateTradeStop } from "@/lib/autopilot.functions";
