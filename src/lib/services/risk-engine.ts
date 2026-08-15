@@ -361,6 +361,9 @@ export function assessRisk(input: RiskInput): RiskAssessment {
     sizeMultiplier: mult,
     effectiveRiskPct: Number(effectiveRiskPct.toFixed(3)),
     lotSize,
+    riskAmount,
+    actualRiskPct,
+
     exposureLots: Number(exposureLots.toFixed(2)),
     drawdownPct: Number(drawdownPct.toFixed(2)),
     dailyLossPct: Number(dailyLossPct.toFixed(2)),
