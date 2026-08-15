@@ -32,8 +32,8 @@ export function oandaFxFetcher(
       { headers },
     );
     if (!res.ok) return null;
-    const body: any = await res.json().catch(() => null);
-    const p = body?.prices?.[0];
+    const body = (await res.json().catch(() => null)) as Record<string, any> | null;
+    const p = body?.["prices"]?.[0];
     if (!p) return null;
     if (p.tradeable === false && !p.closeoutBid) return null;
     const bid = Number(p.bids?.[0]?.price ?? p.closeoutBid);
@@ -57,10 +57,10 @@ export function metaapiFxFetcher(
       { headers },
     );
     if (!res.ok) return null;
-    const p: any = await res.json().catch(() => null);
-    const bid = Number(p?.bid);
-    const ask = Number(p?.ask);
-    const timestamp = parseTime(p?.time ?? p?.brokerTime);
+    const p = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const bid = Number(p?.["bid"]);
+    const ask = Number(p?.["ask"]);
+    const timestamp = parseTime(p?.["time"] ?? p?.["brokerTime"]);
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || !Number.isFinite(timestamp)) return null;
     return { pair, bid, ask, timestamp, source: "metaapi-price" };
   };
@@ -75,10 +75,10 @@ export function bridgeFxFetcher(base: string, headers: Record<string, string>): 
   return async (pair: string): Promise<FxQuote | null> => {
     const res = await fetch(`${base}/fx/${encodeURIComponent(pair)}`, { headers });
     if (!res.ok) return null;
-    const p: any = await res.json().catch(() => null);
-    const bid = Number(p?.bid);
-    const ask = Number(p?.ask);
-    const timestamp = parseTime(p?.time ?? p?.timestamp);
+    const p = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    const bid = Number(p?.["bid"]);
+    const ask = Number(p?.["ask"]);
+    const timestamp = parseTime(p?.["time"] ?? p?.["timestamp"]);
     if (!Number.isFinite(bid) || !Number.isFinite(ask) || !Number.isFinite(timestamp)) return null;
     return { pair, bid, ask, timestamp, source: "bridge-fx" };
   };

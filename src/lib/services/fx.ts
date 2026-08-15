@@ -100,8 +100,10 @@ export function validateConversion(
   if (!c) return { ok: false, reason: "no FX conversion supplied" };
   if (!c.from || !c.to) return { ok: false, reason: "FX conversion is missing a currency" };
   if (c.direction === "identity") {
-    if (c.from !== c.to) return { ok: false, reason: "identity conversion between different currencies" };
-    if (c.rate !== 1) return { ok: false, reason: "identity conversion must have a rate of exactly 1" };
+    if (c.from !== c.to)
+      return { ok: false, reason: "identity conversion between different currencies" };
+    if (c.rate !== 1)
+      return { ok: false, reason: "identity conversion must have a rate of exactly 1" };
     return { ok: true };
   }
   if (typeof c.rate !== "number" || Number.isNaN(c.rate))
@@ -140,11 +142,14 @@ export type ResolveConversionResult =
  * inverse pair, then a cross through a major intermediary. Every candidate is
  * validated before it is accepted; an unusable quote is skipped, not patched.
  */
-export async function resolveConversion(input: ResolveConversionInput): Promise<ResolveConversionResult> {
+export async function resolveConversion(
+  input: ResolveConversionInput,
+): Promise<ResolveConversionResult> {
   const from = (input.from ?? "").toUpperCase();
   const to = (input.to ?? "").toUpperCase();
   const maxAgeMs = input.maxAgeMs ?? FX_MAX_AGE_MS;
-  if (!from || !to) return { ok: false, reason: "currency pair is incomplete — conversion refused" };
+  if (!from || !to)
+    return { ok: false, reason: "currency pair is incomplete — conversion refused" };
   if (from === to) return { ok: true, conversion: identityConversion(from) };
 
   const tried: string[] = [];
@@ -159,7 +164,10 @@ export async function resolveConversion(input: ResolveConversionInput): Promise<
   };
 
   /** Rate that converts A → B using either A_B or B_A. */
-  const leg = async (a: string, b: string): Promise<{ rate: number; quote: FxQuote; inverse: boolean } | null> => {
+  const leg = async (
+    a: string,
+    b: string,
+  ): Promise<{ rate: number; quote: FxQuote; inverse: boolean } | null> => {
     const direct = await get(`${a}_${b}`);
     if (direct) return { rate: midOf(direct), quote: direct, inverse: false };
     const inverse = await get(`${b}_${a}`);

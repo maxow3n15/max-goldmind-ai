@@ -264,7 +264,12 @@ describe("GBP account trading XAUUSD", () => {
   it("blocks when the rounded size would exceed the per-trade cap", () => {
     const r = assessRisk(
       gbpInput({
-        limits: { ...DEFAULT_RISK_LIMITS, maxTotalExposureLots: 50, riskPerTradePct: 0.5, maxRiskPerTradePct: 0.5 },
+        limits: {
+          ...DEFAULT_RISK_LIMITS,
+          maxTotalExposureLots: 50,
+          riskPerTradePct: 0.5,
+          maxRiskPerTradePct: 0.5,
+        },
         spec: gbpXauSpec({ volumeMin: 0.5, volumeStep: 0.5 }),
       }),
     );
