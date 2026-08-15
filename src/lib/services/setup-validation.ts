@@ -44,7 +44,14 @@ const MAX_ENTRY_DRIFT_PCT = 1.2;
 const MIN_RR = 1.0;
 
 const num = (v: unknown): number | null => {
-  const n = typeof v === "string" ? Number(v.replace(/[^0-9.\-]/g, "")) : Number(v);
+  if (typeof v === "string") {
+    // Allow currency formatting ("$2,401.50") but never prose: digits scraped
+    // out of a sentence are a hallucinated price, not a quoted one.
+    if (!/^[\s$€£]*-?[\d,]+(\.\d+)?\s*(usd)?$/i.test(v.trim())) return null;
+    const n = Number(v.replace(/[^0-9.\-]/g, ""));
+    return Number.isFinite(n) ? n : null;
+  }
+  const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
 
