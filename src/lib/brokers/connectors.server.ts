@@ -30,6 +30,12 @@ export interface StandardOrder {
 export interface BrokerConnector {
   id: string;
   fetchAccount(creds: Record<string, string>): Promise<BrokerAccountInfo>;
+  /**
+   * Real contract specification for the symbol, straight from the broker.
+   * Optional: connectors that cannot supply verified spec data omit it, and
+   * callers must then refuse to size the trade rather than assume defaults.
+   */
+  fetchSymbolSpec?(creds: Record<string, string>, symbol: string): Promise<SymbolSpec>;
   placeOrder(creds: Record<string, string>, order: StandardOrder): Promise<{ broker_order_id: string }>;
   closePosition(creds: Record<string, string>, positionId: string): Promise<void>;
   modifyPosition(
@@ -38,6 +44,16 @@ export interface BrokerConnector {
     patch: { stop_loss?: number; take_profit?: number },
   ): Promise<void>;
 }
+
+/** Throws when a required numeric spec field is missing — never guess. */
+function reqNum(v: unknown, field: string, label: string): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(`${label}: broker did not report a usable "${field}" for this symbol`);
+  }
+  return n;
+}
+
 
 async function req(url: string, init: RequestInit & { label: string }): Promise<any> {
   const { label, ...rest } = init;
