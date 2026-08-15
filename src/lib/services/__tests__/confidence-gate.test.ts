@@ -61,8 +61,9 @@ describe("confidence gate integrity", () => {
 
   it("accepts the composite score as a deterministic source", () => {
     const check = confidenceCheck(
-      runSafety(baseInput({ composite: { final: CONFIDENCE_GATES.FINAL + 2 } as any })),
+      runSafety(baseInput({ composite: { final: CONFIDENCE_GATES.FINAL + 2, gates: [] } as any })),
     );
     expect(check.passed).toBe(true);
   });
+
 });
