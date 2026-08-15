@@ -131,6 +131,10 @@ export interface RiskAssessment {
   effectiveRiskPct: number;
   /** Volatility-normalised lot size for the proposal, when one is supplied. */
   lotSize: number | null;
+  /** Monetary risk recomputed from the ROUNDED lot size (account currency). */
+  riskAmount: number | null;
+  /** `riskAmount` as a % of balance, recomputed after rounding. */
+  actualRiskPct: number | null;
   exposureLots: number;
   drawdownPct: number;
   dailyLossPct: number;
@@ -140,8 +144,25 @@ export interface RiskAssessment {
   notes: string[];
 }
 
-/** XAUUSD: 1.00 lot = 100 oz, so $1 of price move = $100 per lot. */
+/**
+ * Contract size used by the deterministic BACKTESTER only, where there is no
+ * broker to query. Never use this for live or paper order sizing.
+ */
 export const GOLD_CONTRACT_SIZE = 100;
+
+/** Explicit simulation spec for the backtester (not a broker fallback). */
+export const SIMULATION_GOLD_SPEC: SymbolSpec = {
+  symbol: "XAUUSD",
+  contractSize: GOLD_CONTRACT_SIZE,
+  tickSize: 0.01,
+  tickValue: 0.01 * GOLD_CONTRACT_SIZE,
+  volumeMin: 0.01,
+  volumeMax: 100,
+  volumeStep: 0.01,
+  marginRate: null,
+  source: "simulation",
+};
+
 
 export const DEFAULT_RISK_LIMITS: RiskLimits = {
   riskPerTradePct: 0.5,
