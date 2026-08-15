@@ -27,6 +27,9 @@ export interface StandardOrder {
   stop_loss?: number | null;
   take_profit?: number | null;
   comment?: string;
+  /** Idempotency key sent to brokers that support client order identifiers. */
+  client_order_id?: string | null;
+
 }
 
 /** Broker-reported state of a single open/closed trade. */
