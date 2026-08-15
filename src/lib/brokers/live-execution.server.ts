@@ -126,7 +126,7 @@ export async function placeLiveOrderCore(
     const res = await connector.placeOrder(creds, {
       symbol: "XAUUSD",
       direction: data.direction,
-      volume: data.lot_size,
+      volume,
       stop_loss: data.stop_loss,
       take_profit: data.take_profit_1 ?? null,
       comment: "GoldMind AI",
@@ -156,13 +156,18 @@ export async function placeLiveOrderCore(
       take_profit_1: data.take_profit_1 ?? null,
       take_profit_2: data.take_profit_2 ?? null,
       take_profit_3: data.take_profit_3 ?? null,
-      lot_size: data.lot_size,
+      lot_size: volume,
       risk_reward: rr,
       confidence: data.confidence ?? null,
       timeframe: data.timeframe ?? null,
       session: data.session ?? null,
       reason_entry: data.reason_entry ?? null,
-      ai_analysis: { ...(data.ai_analysis ?? {}), broker_order_id: brokerOrderId, broker_id: conn.broker_id },
+      ai_analysis: {
+        ...(data.ai_analysis ?? {}),
+        broker_order_id: brokerOrderId,
+        broker_id: conn.broker_id,
+        symbol_spec: spec,
+      },
       source: data.source ?? "auto",
       client_order_id: data.client_order_id ?? null,
       environment: data.environment ?? null,
@@ -209,7 +214,17 @@ export async function closeLiveOrderCore(
     trade.direction === "BUY"
       ? data.exit_price - Number(trade.entry_price)
       : Number(trade.entry_price) - data.exit_price;
-  const pnl = diff * 100 * Number(trade.lot_size);
+  // Value per price point comes from the spec captured at entry; fall back to
+  // the broker's current spec only if the trade predates spec capture.
+  const storedSpec = (trade.ai_analysis as any)?.symbol_spec;
+  let valuePerPoint: number | null =
+    storedSpec && Number(storedSpec.tickValue) > 0 && Number(storedSpec.tickSize) > 0
+      ? Number(storedSpec.tickValue) / Number(storedSpec.tickSize)
+      : null;
+  if (valuePerPoint == null) {
+    throw new Error("Cannot compute live PnL: contract specification for this trade is unavailable.");
+  }
+  const pnl = diff * valuePerPoint * Number(trade.lot_size);
 
   const { error } = await supabase
     .from("trades")
