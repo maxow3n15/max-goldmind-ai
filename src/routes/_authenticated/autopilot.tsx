@@ -5,6 +5,8 @@ import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { MacroSentimentPanel } from "@/components/MacroSentimentPanel";
 import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel";
 import { ManualOrderTicket } from "@/components/ManualOrderTicket";
+import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
+
 
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
