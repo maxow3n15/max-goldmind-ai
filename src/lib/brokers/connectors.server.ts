@@ -46,6 +46,13 @@ export interface BrokerConnector {
    * then treat an unconfirmed close as requiring reconciliation.
    */
   positionExists?(creds: Record<string, string>, positionId: string): Promise<boolean>;
+  /**
+   * Full broker-side view of one trade, used to verify a fill actually
+   * happened with the intended direction, size and protective orders.
+   * Optional: callers must treat its absence as "unverifiable".
+   */
+  fetchTrade?(creds: Record<string, string>, positionId: string): Promise<BrokerTradeState>;
+
   modifyPosition(
     creds: Record<string, string>,
     positionId: string,
