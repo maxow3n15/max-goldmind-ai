@@ -349,10 +349,23 @@ async function runTickCycle(supabaseAdmin: any) {
       }
 
       // ---- Open new legs --------------------------------------------------
-      if (decision.action === "open" && !decision.killSwitchTrip && !feedBroken) {
+      const openBlocked =
+        decision.killSwitchTrip ? "kill switch tripped"
+        : feedBroken ? "candle feed unusable"
+        : reconciliationBlocked ? `reconciliation required — ${reconciliationBlocked}`
+        : null;
+      let submitted = 0;
+      const submissionErrors: string[] = [];
+      if (decision.action === "open" && !openBlocked) {
         for (const plan of decision.plans) {
-          const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey, quote?.spread ?? undefined);
-          if (inserted) opened += 1;
+          submitted += 1;
+          try {
+            const inserted = await openTrade(supabaseAdmin, userId, plan, tradingMode, envKey, quote?.spread ?? undefined);
+            if (inserted) opened += 1;
+            else submissionErrors.push(`${plan.client_order_id ?? "plan"}: not filled`);
+          } catch (e: any) {
+            submissionErrors.push(`${plan.client_order_id ?? "plan"}: ${String(e?.message ?? e).slice(0, 140)}`);
+          }
         }
       }
 
@@ -363,7 +376,7 @@ async function runTickCycle(supabaseAdmin: any) {
         decided_at: new Date().toISOString(),
         symbol: "XAUUSD",
         timeframe,
-        outcome: decision.action === "open" ? "accepted" : "rejected",
+        outcome: decision.action === "open" && !openBlocked ? "accepted" : "rejected",
         direction: analysis?.setup?.direction ?? null,
         confidence: decision.composite?.final ?? analysis?.confidence ?? null,
         technical_score: decision.composite?.technical ?? null,
@@ -372,6 +385,7 @@ async function runTickCycle(supabaseAdmin: any) {
         blockers: [
           ...decision.safety.failingReasons,
           ...(feedBroken ? [`Candle feed unusable: ${structure?.integrity.issues[0] ?? "insufficient data"}`] : []),
+          ...(openBlocked ? [openBlocked] : []),
         ].slice(0, 20),
         price: quote?.mid ?? null,
         spread: quote?.spread ?? null,
@@ -379,12 +393,26 @@ async function runTickCycle(supabaseAdmin: any) {
         payload: {
           source: "cron",
           tier: decision.adaptive.tier,
+          trading_mode: tradingMode,
+          broker_environment: brokerEnvironment,
+          account_source: snapshot.account?.source ?? "paper_account",
+          account_equity: snapshot.account?.equity ?? null,
+          daily_pnl: snapshot.daily_pnl,
+          news_status: macro ? "ok" : "unavailable",
+          news_score: decision.composite?.news ?? null,
+          confidence_components: decision.composite ?? null,
+          timeframe_alignment: structure?.mtf?.alignment ?? null,
+          risk_rejections: decision.safety.failingReasons.slice(0, 6),
+          orders_submitted: submitted,
+          orders_filled: opened,
+          submission_errors: submissionErrors.slice(0, 5),
           feed_integrity: structure?.integrity.status ?? "UNKNOWN",
           feed_issues: structure?.integrity.issues.slice(0, 4) ?? [],
         },
         environment: envKey,
         environment_confidence: decision.environment.regime_confidence,
       }, { onConflict: "user_id,cycle_id", ignoreDuplicates: true });
+
     } catch (e: any) {
       errors.push(`${userId.slice(0, 8)}: ${String(e?.message ?? e).slice(0, 160)}`);
     }
