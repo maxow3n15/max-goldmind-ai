@@ -19,6 +19,8 @@ export interface FxQuote {
   /** Epoch ms at which the source produced the quote. */
   timestamp: number;
   source: string;
+  /** False when the source reports the pair as currently untradeable. */
+  tradeable?: boolean;
 }
 
 export type FxQuoteFetcher = (pair: string) => Promise<FxQuote | null>;
@@ -37,6 +39,8 @@ export interface FxConversion {
   direction: FxDirection;
   /** Pairs actually used, in order. Empty for identity. */
   legs: string[];
+  /** False when every source reported the market as closed/untradeable. */
+  marketOpen?: boolean;
 }
 
 /**
@@ -119,7 +123,9 @@ export function validateConversion(
   if (age > maxAgeMs)
     return {
       ok: false,
-      reason: `FX rate ${c.from}/${c.to} is stale (${Math.round(age / 1000)}s old, limit ${Math.round(maxAgeMs / 1000)}s)`,
+      reason:
+        `FX rate ${c.from}/${c.to} is stale (${Math.round(age / 1000)}s old, limit ${Math.round(maxAgeMs / 1000)}s)` +
+        (c.marketOpen === false ? " — the currency market is closed" : ""),
     };
   return { ok: true };
 }
@@ -189,6 +195,7 @@ export async function resolveConversion(
       timestamp: first.quote.timestamp,
       direction: first.inverse ? "inverse" : "direct",
       legs: [first.quote.pair],
+      marketOpen: first.quote.tradeable !== false,
     };
     const v = validateConversion(conversion, input.now, maxAgeMs);
     return v.ok ? { ok: true, conversion } : { ok: false, reason: v.reason! };
@@ -209,6 +216,7 @@ export async function resolveConversion(
       timestamp: Math.min(a.quote.timestamp, b.quote.timestamp),
       direction: "cross",
       legs: [a.quote.pair, b.quote.pair],
+      marketOpen: a.quote.tradeable !== false && b.quote.tradeable !== false,
     };
     const v = validateConversion(conversion, input.now, maxAgeMs);
     if (v.ok) return { ok: true, conversion };
