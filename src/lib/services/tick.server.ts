@@ -162,11 +162,15 @@ async function runTickCycle(supabaseAdmin: any) {
       const sumSince = (d: Date) =>
         closed.filter((t: any) => t.closed_at && new Date(t.closed_at) >= d)
           .reduce((a: number, t: any) => a + Number(t.pnl), 0);
-      const snapshot = {
+      const tradingMode: "paper" | "live" = settings.trading_mode === "live" ? "live" : "paper";
+      // Paper mode uses the internal paper account. Broker mode NEVER does —
+      // it is replaced below by the broker's own account state.
+      const snapshot: { account: any; daily_pnl: number; weekly_pnl: number } = {
         account: acct ?? { balance: 10000, equity: 10000, free_margin: 10000, margin_used: 0 },
         daily_pnl: sumSince(dayStart),
         weekly_pnl: sumSince(weekStart),
       };
+
 
       const calibration = buildCalibration(
         closed.map((t: any) => ({ confidence: t.confidence, pnl: t.pnl })),
