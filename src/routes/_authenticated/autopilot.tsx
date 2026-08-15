@@ -100,12 +100,16 @@ function Autopilot() {
                 : "Autopilot is paused."}
           </div>
           <div className="text-xs opacity-80 mt-0.5">
-            The engine keeps running on every page while this tab is open — use the corner widget to pause it or watch live trades. For 24/7 headless operation, deploy the external trading worker.
+            The engine also runs headless on the server every minute, so trades keep being opened and managed with no tab open. Use the corner widget to pause it or watch live trades.
           </div>
         </div>
       </div>
 
+      {/* Authoritative, server-derived execution & arming state */}
+      <ExecutionStatePanel />
+
       {/* Manual order ticket — user-initiated entries, managed like any other */}
+
       <ManualOrderTicket
         mode={(a.settings as any)?.trading_mode === "live" ? "live" : "paper"}
         timeframe={timeframe}
