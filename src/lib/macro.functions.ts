@@ -39,6 +39,9 @@ let cache: Cached | null = null;
 const TTL_MS = 5 * 60_000;
 
 function neutral(reason: string): MacroReport {
+  // Event risk does not depend on the news feed, so the deterministic
+  // calendar still applies even when the macro model is unavailable.
+  const calendar = readEconomicCalendar(Date.now());
   return {
     generated_at: Date.now(),
     news_score: 50,
@@ -53,9 +56,22 @@ function neutral(reason: string): MacroReport {
     bullish_drivers: [],
     bearish_drivers: [],
     headlines: [],
-    upcoming_events: [],
-    blackout: { active: false, reason: null, event: null, minutes_away: null },
-    post_event_wait: false,
+    upcoming_events: calendar.upcoming.slice(0, 6).map((e) => ({
+      name: e.name,
+      when: new Date(e.at).toISOString(),
+      hours_away: Number((e.minutesAway / 60).toFixed(2)),
+      impact: e.impact as any,
+      expectation: e.estimated ? "Timing estimated from the usual release window" : null,
+      priced_in: false,
+    })),
+    blackout: {
+      active: calendar.blackout.active,
+      reason: calendar.blackout.reason,
+      event: calendar.blackout.event,
+      minutes_away: calendar.blackout.minutesAway,
+    },
+    post_event_wait: calendar.blackout.postEvent,
+
     degraded: true,
   };
 }
