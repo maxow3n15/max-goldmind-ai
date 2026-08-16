@@ -113,6 +113,18 @@ export function applyStopMove(
   return true;
 }
 
+/**
+ * Rejection strings carry the measured value ("Confidence >= 88% (61%)"), which
+ * would otherwise produce one bucket per bar. Strip the value so the summary
+ * groups by cause.
+ */
+export function normaliseRejection(reason: string): string {
+  return reason
+    .replace(/\s*\([^()]*\d[^()]*\)\s*$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 interface LiveLeg extends SimTrade {
   id: string;
   legIndex: number;
@@ -314,7 +326,7 @@ export function runPipelineBacktest(
 
     if (decision.action !== "open" || decision.plans.length === 0) {
       if (proposal) {
-        const reason = decision.rejection ?? decision.killSwitchTrip ?? "Pipeline declined";
+        const reason = normaliseRejection(decision.rejection ?? decision.killSwitchTrip ?? "Pipeline declined");
         rejections.set(reason, (rejections.get(reason) ?? 0) + 1);
       }
       continue;
