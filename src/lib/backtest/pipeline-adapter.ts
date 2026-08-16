@@ -122,11 +122,11 @@ export function buildReplayQuote(price: number, spread: number): MarketQuote {
     symbol: "XAUUSD",
     bid: Number((price - spread / 2).toFixed(2)),
     ask: Number((price + spread / 2).toFixed(2)),
-    price: Number(price.toFixed(2)),
+    mid: Number(price.toFixed(2)),
     spread: Number(spread.toFixed(2)),
     timestamp: Date.now(),
     source: "replay",
-  } as MarketQuote;
+  };
 }
 
 export interface ReplaySettings {
