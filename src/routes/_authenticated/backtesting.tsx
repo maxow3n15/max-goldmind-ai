@@ -259,7 +259,25 @@ function BacktestingPage() {
                     <li className="text-muted-foreground">No candidates were rejected.</li>
                   )}
                 </ul>
+                {result.confidence?.samples > 0 && (
+                  <div className="mt-3 border-t border-border/50 pt-3 text-[11px] text-muted-foreground space-y-1">
+                    <div className="flex justify-between gap-3">
+                      <span>Deterministic confidence on candidates</span>
+                      <span className="tabular-nums text-foreground">
+                        median {result.confidence.median}% · p90 {result.confidence.p90}% · max {result.confidence.max}%
+                      </span>
+                    </div>
+                    {result.confidence.max < 88 && (
+                      <p>
+                        Every candidate stayed below the live 88% gate, so no trade was taken. In replay the AI
+                        conviction, macro and correlation pillars are neutralised, which caps the achievable score —
+                        this measures the deterministic engine, not the live system's full confidence.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
+
               <div className="glass-panel rounded-xl p-4">
                 <h2 className="text-sm font-medium mb-2">Setup models traded</h2>
                 <ul className="space-y-1 text-xs">
