@@ -1,4 +1,8 @@
-// Historical simulation engine.
+// Historical simulation engine — "classic" mode.
+//
+// This is the original rule-based proxy strategy (EMA stack + RSI reset + ATR
+// expansion). It is NOT the live decision pipeline; see
+// `pipeline-engine.ts` for the replay that drives the real orchestrator.
 //
 // Pure and deterministic: candles in, equity curve + metrics out. The same
 // risk engine that guards live trading guards the simulation, so backtest
@@ -48,6 +52,10 @@ export interface SimTrade {
   confidence: number;
   reason: string;
   exitReason: "target" | "stop" | "trail" | "timeout";
+  /** Named GoldMind setup model — pipeline mode only. */
+  model?: string | null;
+  /** Ladder leg number — pipeline mode only. */
+  leg?: number;
 }
 
 export interface EquityPoint { t: number; equity: number; drawdown: number }
@@ -286,7 +294,7 @@ export function runBacktest(candles: Candle[], config: BacktestConfig): Backtest
   };
 }
 
-function computeMetrics(
+export function computeMetrics(
   trades: SimTrade[], curve: EquityPoint[], startBalance: number, finalBalance: number,
   maxDrawdown: number, maxDrawdownPct: number, blockedByRisk: number,
 ): BacktestMetrics {
@@ -339,7 +347,7 @@ function computeMetrics(
   };
 }
 
-function downsample(points: EquityPoint[], max: number): EquityPoint[] {
+export function downsample(points: EquityPoint[], max: number): EquityPoint[] {
   if (points.length <= max) return points;
   const step = Math.ceil(points.length / max);
   const out: EquityPoint[] = [];

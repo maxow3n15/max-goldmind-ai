@@ -5,7 +5,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { FlaskConical, Play, Trash2, TrendingUp, ShieldAlert } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { runBacktestFn, listBacktestRuns, deleteBacktestRun } from "@/lib/backtest.functions";
+import { runBacktestFn, listBacktestRuns, deleteBacktestRun, PERIODS_BY_TIMEFRAME } from "@/lib/backtest.functions";
+import { FIDELITY_CAVEATS } from "@/lib/backtest/pipeline-adapter";
 
 export const Route = createFileRoute("/_authenticated/backtesting")({
   component: BacktestingPage,
@@ -22,7 +23,19 @@ export const Route = createFileRoute("/_authenticated/backtesting")({
 });
 
 const TIMEFRAMES = ["5", "15", "30", "60", "240"] as const;
-const PERIODS = ["1mo", "3mo", "6mo", "1y", "2y"] as const;
+
+const MODES = [
+  {
+    key: "pipeline" as const,
+    label: "Real pipeline",
+    blurb: "Replays the live decision engine — structure, multi-timeframe bias, setup models, confidence, safety checklist, risk sizing and position management.",
+  },
+  {
+    key: "classic" as const,
+    label: "Classic proxy",
+    blurb: "The original rule-based EMA / RSI / ATR proxy strategy. Fast, but it is not the strategy the platform actually trades.",
+  },
+];
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "up" | "down" }) {
   return (
@@ -41,8 +54,10 @@ function BacktestingPage() {
   const listFn = useServerFn(listBacktestRuns);
   const delFn = useServerFn(deleteBacktestRun);
 
+  const [mode, setMode] = useState<"pipeline" | "classic">("pipeline");
   const [timeframe, setTimeframe] = useState<(typeof TIMEFRAMES)[number]>("15");
-  const [period, setPeriod] = useState<(typeof PERIODS)[number]>("3mo");
+  const periodOptions = PERIODS_BY_TIMEFRAME[timeframe] ?? ["1mo"];
+  const [period, setPeriod] = useState<string>("1mo");
   const [startingBalance, setStartingBalance] = useState(10_000);
   const [riskPerTradePct, setRisk] = useState(0.5);
   const [rrTarget, setRr] = useState(2);
@@ -59,7 +74,8 @@ function BacktestingPage() {
     mutationFn: () =>
       runFn({
         data: {
-          timeframe, period, startingBalance, riskPerTradePct, rrTarget,
+          mode, timeframe, period: (periodOptions.includes(period) ? period : periodOptions[0]) as any,
+          startingBalance, riskPerTradePct, rrTarget,
           atrStopMultiple, minConfidence, costPerTrade, useTrailingStop, londonNyOnly, save: true,
         },
       }),
@@ -95,10 +111,33 @@ function BacktestingPage() {
       </header>
 
       <div className="glass-panel rounded-xl p-5 space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {MODES.map((mo) => (
+            <button
+              key={mo.key}
+              type="button"
+              onClick={() => setMode(mo.key)}
+              className={`text-left rounded-lg border p-3 transition-colors ${
+                mode === mo.key
+                  ? "border-[color:var(--gold)] bg-[color:var(--gold)]/10"
+                  : "border-border hover:border-muted-foreground/40"
+              }`}
+            >
+              <div className="text-sm font-medium">{mo.label}</div>
+              <p className="text-xs text-muted-foreground mt-1">{mo.blurb}</p>
+            </button>
+          ))}
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs space-y-1.5">
             <span className="text-muted-foreground">Timeframe</span>
-            <select value={timeframe} onChange={(e) => setTimeframe(e.target.value as any)}
+            <select value={timeframe} onChange={(e) => {
+                const tf = e.target.value as any;
+                setTimeframe(tf);
+                const opts = PERIODS_BY_TIMEFRAME[tf] ?? ["1mo"];
+                if (!opts.includes(period)) setPeriod(opts[0]);
+              }}
               className="w-full bg-background border border-border rounded-md px-2 py-2 text-sm">
               {TIMEFRAMES.map((t) => <option key={t} value={t}>{t === "240" ? "4h" : `${t}m`}</option>)}
             </select>
@@ -107,8 +146,11 @@ function BacktestingPage() {
             <span className="text-muted-foreground">History</span>
             <select value={period} onChange={(e) => setPeriod(e.target.value as any)}
               className="w-full bg-background border border-border rounded-md px-2 py-2 text-sm">
-              {PERIODS.map((p) => <option key={p} value={p}>{p}</option>)}
+              {periodOptions.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
+            <span className="block text-[10px] text-muted-foreground">
+              Capped to what the data provider serves at this interval.
+            </span>
           </label>
           <label className="text-xs space-y-1.5">
             <span className="text-muted-foreground">Starting balance ($)</span>
@@ -164,6 +206,24 @@ function BacktestingPage() {
         </div>
       </div>
 
+      {mode === "pipeline" && (
+        <div className="glass-panel rounded-xl p-4 border border-amber-500/30">
+          <h2 className="text-sm font-medium flex items-center gap-2">
+            <ShieldAlert className="h-4 w-4 text-amber-400" /> Replay fidelity
+          </h2>
+          <p className="text-xs text-muted-foreground mt-1">
+            The deterministic majority of the live system runs unchanged. These parts cannot be reconstructed
+            from history and are neutralised, so results are indicative of structure and risk behaviour, not of
+            fundamentals-aware live performance.
+          </p>
+          <ul className="mt-2 space-y-1 text-xs text-muted-foreground list-disc pl-4">
+            {(Array.isArray(result?.caveats) ? result.caveats : FIDELITY_CAVEATS).map((c: string) => (
+              <li key={c}>{c}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {m && (
         <>
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-6">
@@ -180,6 +240,65 @@ function BacktestingPage() {
             <Stat label="Avg loss" value={`$${m.avgLoss}`} tone="down" />
             <Stat label="Blocked by risk" value={String(m.blockedByRisk)} />
           </div>
+
+          {result?.mode === "pipeline" && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <div className="glass-panel rounded-xl p-4">
+                <h2 className="text-sm font-medium mb-2">Why the pipeline declined</h2>
+                <p className="text-[11px] text-muted-foreground mb-2">
+                  {result.candidateBars} bars produced a named setup candidate; {result.approvedBars} were approved.
+                </p>
+                <ul className="space-y-1 text-xs">
+                  {(result.rejections ?? []).map((r: any) => (
+                    <li key={r.reason} className="flex justify-between gap-3">
+                      <span className="text-muted-foreground truncate">{r.reason}</span>
+                      <span className="tabular-nums">{r.count}</span>
+                    </li>
+                  ))}
+                  {(result.rejections ?? []).length === 0 && (
+                    <li className="text-muted-foreground">No candidates were rejected.</li>
+                  )}
+                </ul>
+                {result.confidence?.samples > 0 && (
+                  <div className="mt-3 border-t border-border/50 pt-3 text-[11px] text-muted-foreground space-y-1">
+                    <div className="flex justify-between gap-3">
+                      <span>Deterministic confidence on candidates</span>
+                      <span className="tabular-nums text-foreground">
+                        median {result.confidence.median}% · p90 {result.confidence.p90}% · max {result.confidence.max}%
+                      </span>
+                    </div>
+                    {result.confidence.max < 88 && (
+                      <p>
+                        Every candidate stayed below the live 88% gate, so no trade was taken. In replay the AI
+                        conviction, macro and correlation pillars are neutralised, which caps the achievable score —
+                        this measures the deterministic engine, not the live system's full confidence.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="glass-panel rounded-xl p-4">
+                <h2 className="text-sm font-medium mb-2">Setup models traded</h2>
+                <ul className="space-y-1 text-xs">
+                  {(result.models ?? []).map((mm: any) => (
+                    <li key={mm.model} className="flex justify-between gap-3">
+                      <span className="text-muted-foreground">{mm.model.replaceAll("_", " ").toLowerCase()}</span>
+                      <span className="tabular-nums">{mm.trades}</span>
+                    </li>
+                  ))}
+                  {(result.models ?? []).length === 0 && (
+                    <li className="text-muted-foreground">No trades were taken.</li>
+                  )}
+                </ul>
+                {Array.isArray(result.missingTimeframes) && result.missingTimeframes.length > 0 && (
+                  <p className="text-[11px] text-muted-foreground mt-3">
+                    Timeframes unavailable in replay: {result.missingTimeframes.join(", ")}
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           <div className="glass-panel rounded-xl p-4">
             <h2 className="text-sm font-medium flex items-center gap-2 mb-3">
