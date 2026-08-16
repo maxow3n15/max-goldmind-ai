@@ -340,7 +340,7 @@ export function runPipelineBacktest(
     );
 
     if (proposal) {
-      const c = decision.composite?.final ?? decision.structured?.confidence ?? null;
+      const c = decision.composite?.final ?? decision.structured?.score ?? null;
       if (typeof c === "number" && Number.isFinite(c)) confidenceSamples.push(c);
     }
 
