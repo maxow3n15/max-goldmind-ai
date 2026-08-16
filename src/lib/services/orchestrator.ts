@@ -40,7 +40,7 @@ export interface AccountState {
   recentPnl: number[];
 }
 
-export function deriveAccountState(tradeRows: any[], snapshot: any | null): AccountState {
+export function deriveAccountState(tradeRows: any[], snapshot: any | null, now?: number): AccountState {
   const rows = Array.isArray(tradeRows) ? tradeRows : [];
 
   const closedDesc = rows
@@ -53,7 +53,7 @@ export function deriveAccountState(tradeRows: any[], snapshot: any | null): Acco
     else break;
   }
 
-  const day = new Date();
+  const day = new Date(now ?? Date.now());
   day.setUTCHours(0, 0, 0, 0);
   const todayTradeCount = rows.filter((t: any) => new Date(t.opened_at) >= day).length;
 
@@ -188,6 +188,13 @@ export interface OrchestratorInput {
   confidenceWeights?: Partial<Record<FactorKey, number>> | null;
   /** Session extreme sweep from the deterministic liquidity read. */
   sessionSweep?: { side: "buy_side" | "sell_side"; reclaimed: boolean; t: number } | null;
+  /**
+   * Decision-time clock, UTC ms. Live callers omit it and get `Date.now()`.
+   * Historical replay MUST pass the bar's timestamp so that day boundaries,
+   * structural-event recency and signal expiry are evaluated as of that bar
+   * rather than as of the machine running the simulation.
+   */
+  now?: number;
 }
 
 export type OrchestratorAction = "open" | "reject" | "halt";
@@ -217,7 +224,8 @@ export interface OrchestratorDecision {
 }
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
-  const account = deriveAccountState(i.trades, i.snapshot);
+  const now = i.now ?? Date.now();
+  const account = deriveAccountState(i.trades, i.snapshot, now);
   const s: any = i.settings ?? {};
 
   const environment = classifyEnvironment(i.quant, i.macro);
@@ -338,6 +346,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     mtf: i.mtf ?? null,
     sessionSweep: i.sessionSweep ?? null,
     atr: i.quant?.volatility?.atr ?? null,
+    now,
   });
 
   const setupKey = setup
@@ -463,6 +472,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     balance,
     riskPctPerLeg,
     cycleId: i.cycleId || (setupKey ?? "cycle"),
+    now,
   });
 
   if (plans.length === 0) {
