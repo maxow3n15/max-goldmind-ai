@@ -12,3 +12,4 @@ const res = await (async () => {
 console.log({trades: res.trades.length, candidateBars: res.candidateBars, approved: res.approvedBars, net: res.metrics.netPnl, wr: res.metrics.winRate, pf: res.metrics.profitFactor});
 console.log(res.rejections);
 console.log(res.models);
+console.log("confidence", res.confidence);
