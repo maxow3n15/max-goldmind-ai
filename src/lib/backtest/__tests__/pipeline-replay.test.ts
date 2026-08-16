@@ -219,15 +219,17 @@ describe("position management transitions", () => {
   });
 
   it("trails once beyond 1R and never widens the stop", () => {
-    const leg = { direction: "BUY" as const, stop: 2000, movedToBe: true };
-    const action = evaluatePosition({ trade: { ...trade, stop_loss: 2000 }, price: 2015, atr: 4 });
+    // Stop already locked in above entry, so the break-even branch is done
+    // and the ATR trail takes over.
+    const leg = { direction: "BUY" as const, stop: 2002, movedToBe: true };
+    const action = evaluatePosition({ trade: { ...trade, stop_loss: 2002 }, price: 2015, atr: 4 });
     expect(action.type).toBe("move_stop");
     if (action.type === "move_stop") {
       expect(applyStopMove(leg, action.new_stop)).toBe(true);
-      expect(leg.stop).toBeGreaterThan(2000);
+      expect(leg.stop).toBeGreaterThan(2002);
       // A worse stop is refused outright.
       expect(applyStopMove(leg, 1995)).toBe(false);
-      expect(leg.stop).toBeGreaterThan(2000);
+      expect(leg.stop).toBeGreaterThan(2002);
     }
   });
 
