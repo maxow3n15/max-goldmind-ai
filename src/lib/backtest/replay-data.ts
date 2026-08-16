@@ -105,6 +105,14 @@ export class PointInTimeSeries {
     this.cursor += 1;
     const bar = this.base[this.cursor];
     for (const [tf, series] of this.series) {
+      if (tf === this.baseTf) {
+        // The execution series is passed through verbatim: re-bucketing it
+        // would merge bars whenever the provider's stamps are not aligned to
+        // the nominal interval.
+        series.push({ ...bar });
+        if (series.length > this.maxBars) series.shift();
+        continue;
+      }
       pushBar(series, bar, TIMEFRAME_MINUTES[tf], this.maxBars);
     }
     return bar;
