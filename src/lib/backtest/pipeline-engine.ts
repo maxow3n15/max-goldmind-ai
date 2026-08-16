@@ -80,6 +80,8 @@ interface LiveLeg extends SimTrade {
   id: string;
   legIndex: number;
   openBar: number;
+  /** Stop as originally placed — the denominator for R multiples. */
+  initialStop: number;
   movedToBe: boolean;
   session: string;
 }
