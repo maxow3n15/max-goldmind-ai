@@ -74,6 +74,8 @@ export interface PipelineBacktestResult extends BacktestResult {
   models: { model: string; trades: number }[];
   caveats: string[];
   missingTimeframes: TimeframeKey[];
+  /** Distribution of the deterministic confidence on candidate bars. */
+  confidence: { samples: number; median: number; p90: number; max: number };
 }
 
 /**
@@ -123,6 +125,18 @@ export function normaliseRejection(reason: string): string {
     .replace(/\s*\([^()]*\d[^()]*\)\s*$/, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function summariseConfidence(values: number[]) {
+  if (!values.length) return { samples: 0, median: 0, p90: 0, max: 0 };
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+  return {
+    samples: sorted.length,
+    median: Math.round(at(0.5)),
+    p90: Math.round(at(0.9)),
+    max: Math.round(sorted[sorted.length - 1]),
+  };
 }
 
 interface LiveLeg extends SimTrade {
@@ -197,6 +211,7 @@ export function runPipelineBacktest(
   let open: LiveLeg[] = [];
   const equityCurve: EquityPoint[] = [];
   const rejections = new Map<string, number>();
+  const confidenceSamples: number[] = [];
   const models = new Map<string, number>();
   let candidateBars = 0;
   let approvedBars = 0;
@@ -324,6 +339,11 @@ export function runPipelineBacktest(
       }),
     );
 
+    if (proposal) {
+      const c = decision.composite?.final ?? decision.structured?.confidence ?? null;
+      if (typeof c === "number" && Number.isFinite(c)) confidenceSamples.push(c);
+    }
+
     if (decision.action !== "open" || decision.plans.length === 0) {
       if (proposal) {
         const reason = normaliseRejection(decision.rejection ?? decision.killSwitchTrip ?? "Pipeline declined");
@@ -406,6 +426,7 @@ export function runPipelineBacktest(
     bars: candles.length,
     from: candles.length ? candles[0].t : null,
     to: candles.length ? candles[candles.length - 1].t : null,
+    confidence: summariseConfidence(confidenceSamples),
     rejections: [...rejections.entries()]
       .map(([reason, count]) => ({ reason, count }))
       .sort((a, b) => b.count - a.count)
