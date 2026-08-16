@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { FlaskConical, Play, Trash2, TrendingUp, ShieldAlert } from "lucide-react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { runBacktestFn, listBacktestRuns, deleteBacktestRun, PERIODS_BY_TIMEFRAME } from "@/lib/backtest.functions";
+import { FIDELITY_CAVEATS } from "@/lib/backtest/pipeline-adapter";
 
 export const Route = createFileRoute("/_authenticated/backtesting")({
   component: BacktestingPage,
@@ -216,7 +217,7 @@ function BacktestingPage() {
             fundamentals-aware live performance.
           </p>
           <ul className="mt-2 space-y-1 text-xs text-muted-foreground list-disc pl-4">
-            {(Array.isArray(result?.caveats) ? result.caveats : FALLBACK_CAVEATS).map((c: string) => (
+            {(Array.isArray(result?.caveats) ? result.caveats : FIDELITY_CAVEATS).map((c: string) => (
               <li key={c}>{c}</li>
             ))}
           </ul>
