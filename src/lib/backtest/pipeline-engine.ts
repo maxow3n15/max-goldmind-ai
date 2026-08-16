@@ -76,6 +76,43 @@ export interface PipelineBacktestResult extends BacktestResult {
   missingTimeframes: TimeframeKey[];
 }
 
+/**
+ * Resolve one open leg against one bar. Pure, and the single place fill
+ * pessimism is expressed: gaps fill at the open, and a bar that touches both
+ * the stop and the target is assumed to have hit the stop first.
+ */
+export function resolveLegAgainstBar(
+  leg: { direction: Direction; stop: number; target: number; movedToBe: boolean; openBar: number },
+  bar: Candle,
+  barIndex: number,
+  maxHoldBars: number,
+): { exit: number; reason: SimTrade["exitReason"] } | null {
+  const isBuy = leg.direction === "BUY";
+  if (isBuy ? bar.o <= leg.stop : bar.o >= leg.stop) {
+    return { exit: bar.o, reason: leg.movedToBe ? "trail" : "stop" };
+  }
+  if (isBuy ? bar.l <= leg.stop : bar.h >= leg.stop) {
+    return { exit: leg.stop, reason: leg.movedToBe ? "trail" : "stop" };
+  }
+  if (isBuy ? bar.h >= leg.target : bar.l <= leg.target) {
+    return { exit: leg.target, reason: "target" };
+  }
+  if (barIndex - leg.openBar >= maxHoldBars) return { exit: bar.c, reason: "timeout" };
+  return null;
+}
+
+/** Apply a management stop move, refusing anything that widens risk. */
+export function applyStopMove(
+  leg: { direction: Direction; stop: number; movedToBe: boolean },
+  newStop: number,
+): boolean {
+  const improves = leg.direction === "BUY" ? newStop > leg.stop : newStop < leg.stop;
+  if (!improves) return false;
+  leg.stop = newStop;
+  leg.movedToBe = true;
+  return true;
+}
+
 interface LiveLeg extends SimTrade {
   id: string;
   legIndex: number;
@@ -187,27 +224,9 @@ export function runPipelineBacktest(
     /* ---- 1. resolve open positions against this bar ------------------ */
     const survivors: LiveLeg[] = [];
     for (const leg of open) {
-      const isBuy = leg.direction === "BUY";
-      // Gaps are honoured: an open beyond the stop fills at the open.
-      const gapped = isBuy ? bar.o <= leg.stop : bar.o >= leg.stop;
-      const hitStop = isBuy ? bar.l <= leg.stop : bar.h >= leg.stop;
-      const hitTarget = isBuy ? bar.h >= leg.target : bar.l <= leg.target;
-
-      if (gapped) {
-        closeLeg(leg, bar.o, bar.t, leg.movedToBe ? "trail" : "stop");
-        continue;
-      }
-      // Pessimistic: when a bar touches both, the stop is assumed first.
-      if (hitStop) {
-        closeLeg(leg, leg.stop, bar.t, leg.movedToBe ? "trail" : "stop");
-        continue;
-      }
-      if (hitTarget) {
-        closeLeg(leg, leg.target, bar.t, "target");
-        continue;
-      }
-      if (i - leg.openBar >= cfg.maxHoldBars) {
-        closeLeg(leg, bar.c, bar.t, "timeout");
+      const resolved = resolveLegAgainstBar(leg, bar, i, cfg.maxHoldBars);
+      if (resolved) {
+        closeLeg(leg, resolved.exit, bar.t, resolved.reason);
         continue;
       }
       survivors.push(leg);
@@ -251,11 +270,7 @@ export function runPipelineBacktest(
       const leg = open.find((l) => l.id === a.trade.id);
       if (!leg) continue;
       if (a.action.type === "move_stop") {
-        const improves = leg.direction === "BUY" ? a.action.new_stop > leg.stop : a.action.new_stop < leg.stop;
-        if (improves) {
-          leg.stop = a.action.new_stop;
-          leg.movedToBe = true;
-        }
+        applyStopMove(leg, a.action.new_stop);
       } else if (a.action.type === "close") {
         closeLeg(leg, bar.c, bar.t, "trail");
         open = open.filter((l) => l.id !== leg.id);
