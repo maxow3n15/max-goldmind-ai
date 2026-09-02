@@ -133,7 +133,18 @@ export class PointInTimeSeries {
         if (series.length > this.maxBars) series.shift();
         continue;
       }
+      if (this.finer.has(tf)) continue;
       pushBar(series, bar, TIMEFRAME_MINUTES[tf], this.maxBars);
+    }
+    // Sub-execution series advance by cursor: every candle stamped at or
+    // before the current bar becomes visible, nothing after it ever does.
+    for (const [tf, state] of this.finer) {
+      const series = this.series.get(tf)!;
+      while (state.next < state.src.length && state.src[state.next].t <= bar.t) {
+        series.push({ ...state.src[state.next] });
+        if (series.length > this.maxBars) series.shift();
+        state.next += 1;
+      }
     }
     return bar;
   }
