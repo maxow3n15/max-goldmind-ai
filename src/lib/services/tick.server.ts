@@ -59,17 +59,26 @@ export async function runScheduledTick() {
   }
 }
 
-async function runTickCycle(supabaseAdmin: any) {
+export interface TickCycleOptions {
+  /** Restrict the cycle to one user, ignoring their auto_execute flag. */
+  onlyUserId?: string;
+  /** Evaluate and manage, but never submit new orders. */
+  dryRun?: boolean;
+}
 
-  const { data: users } = await supabaseAdmin
-    .from("user_settings")
-    .select("*")
-    .eq("auto_execute", true)
-    .eq("kill_switch_active", false)
-    .limit(MAX_USERS_PER_TICK);
+async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
+
+  let query = supabaseAdmin.from("user_settings").select("*");
+  if (opts.onlyUserId) {
+    query = query.eq("user_id", opts.onlyUserId);
+  } else {
+    query = query.eq("auto_execute", true).eq("kill_switch_active", false);
+  }
+  const { data: users } = await query.limit(opts.onlyUserId ? 1 : MAX_USERS_PER_TICK);
 
   const enabled = users ?? [];
-  if (enabled.length === 0) return { users: 0, opened: 0, managed: 0 };
+  const proposals: any[] = [];
+  if (enabled.length === 0) return { users: 0, opened: 0, managed: 0, proposals };
 
   const quote = await fetchSpotQuote();
 
@@ -362,7 +371,8 @@ async function runTickCycle(supabaseAdmin: any) {
 
       // ---- Open new legs --------------------------------------------------
       const openBlocked =
-        decision.killSwitchTrip ? "kill switch tripped"
+        opts.dryRun ? "dry run — execution requires explicit approval"
+        : decision.killSwitchTrip ? "kill switch tripped"
         : feedBroken ? "candle feed unusable"
         : reconciliationBlocked ? `reconciliation required — ${reconciliationBlocked}`
         : null;
@@ -380,6 +390,33 @@ async function runTickCycle(supabaseAdmin: any) {
           }
         }
       }
+
+      // ---- Proposal (surfaced to a manual cycle) --------------------------
+      proposals.push({
+        userId,
+        timeframe,
+        cycleId,
+        action: decision.action,
+        blocked: openBlocked,
+        direction: analysis?.setup?.direction ?? null,
+        entry: analysis?.setup?.entry ?? null,
+        stop_loss: analysis?.setup?.stop_loss ?? null,
+        take_profit_1: analysis?.setup?.take_profit_1 ?? null,
+        take_profit_2: analysis?.setup?.take_profit_2 ?? null,
+        take_profit_3: analysis?.setup?.take_profit_3 ?? null,
+        confidence: decision.composite?.final ?? analysis?.confidence ?? null,
+        composite: decision.composite ?? null,
+        structured: decision.structured ?? null,
+        setup_model: decision.setup.best?.type ?? null,
+        setup_verdict: decision.setup.best?.verdict ?? null,
+        blockers: decision.safety.failingReasons.slice(0, 12),
+        plans: decision.plans,
+        price: quote?.mid ?? null,
+        spread: quote?.spread ?? null,
+        trading_mode: tradingMode,
+        broker_environment: brokerEnvironment,
+        explanation: analysis?.explanation ?? null,
+      });
 
       // ---- Audit trail -----------------------------------------------------
       await supabaseAdmin.from("decision_logs").upsert({
@@ -437,7 +474,18 @@ async function runTickCycle(supabaseAdmin: any) {
     }
   }
 
-  return { users: enabled.length, opened, managed, reconciled, errors };
+  return { users: enabled.length, opened, managed, reconciled, errors, proposals };
+}
+
+/**
+ * One cycle for a single user, on demand. Used by the manual "run cycle now"
+ * control: `dryRun` evaluates and manages open trades but never submits an
+ * order, so the proposal can be reviewed and approved by hand.
+ */
+export async function runCycleForUser(userId: string, opts: { dryRun?: boolean } = {}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const result = await runTickCycle(supabaseAdmin, { onlyUserId: userId, dryRun: opts.dryRun });
+  return { ...result, proposal: result.proposals[0] ?? null };
 }
 
 /* -------------------------------------------------------------- */
