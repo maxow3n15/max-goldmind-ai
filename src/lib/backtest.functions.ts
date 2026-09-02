@@ -82,7 +82,7 @@ export const runBacktestFn = createServerFn({ method: "POST" })
         const { fetchOandaHistory } = await import("@/lib/backtest/oanda-history.server");
         const history = await fetchOandaHistory({
           credentials: resolved.credentials,
-          environment: resolved.env === "live" ? "live" : "practice",
+          environment: resolved.env.endsWith("_live") ? "live" : "practice",
           timeframe: data.timeframe,
           days: PERIOD_DAYS[data.period] ?? 30,
         });
