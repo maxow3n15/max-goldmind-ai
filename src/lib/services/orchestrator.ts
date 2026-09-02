@@ -188,6 +188,21 @@ export interface OrchestratorInput {
   entryStructure?: StructureRead | null;
   /** Per-user confidence factor weights. */
   confidenceWeights?: Partial<Record<FactorKey, number>> | null;
+  /** Composite pillar-weight overrides (calibration harness only). */
+  compositeWeights?: Record<string, number> | null;
+  /**
+   * RESEARCH ONLY — the replay/calibration harness may evaluate below the live
+   * confidence floor to measure what the gate filters out. Live callers leave
+   * this undefined and the floor stays SAFETY_CONSTANTS.MIN_CONFIDENCE.
+   */
+  researchConfidenceFloor?: number | null;
+  /**
+   * RESEARCH ONLY — replay harness. The consecutive-loss lockout latches until
+   * an operator resets it; a multi-year replay has no operator, so the harness
+   * supplies the streak measured since the current session started. Live
+   * callers omit this and the derived streak is used unchanged.
+   */
+  researchConsecutiveLosses?: number | null;
   /** Session extreme sweep from the deterministic liquidity read. */
   sessionSweep?: { side: "buy_side" | "sell_side"; reclaimed: boolean; t: number } | null;
   /**
@@ -227,10 +242,18 @@ export interface OrchestratorDecision {
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
   const now = i.now ?? Date.now();
-  const account = deriveAccountState(i.trades, i.snapshot, now);
+  const derived = deriveAccountState(i.trades, i.snapshot, now);
+  const account: AccountState =
+    i.researchConsecutiveLosses != null && Number.isFinite(Number(i.researchConsecutiveLosses))
+      ? { ...derived, consecutiveLosses: Number(i.researchConsecutiveLosses) }
+      : derived;
   const s: any = i.settings ?? {};
 
   const environment = classifyEnvironment(i.quant, i.macro);
+  const confidenceFloor =
+    i.researchConfidenceFloor != null && Number.isFinite(Number(i.researchConfidenceFloor))
+      ? Number(i.researchConfidenceFloor)
+      : SAFETY_CONSTANTS.MIN_CONFIDENCE;
 
   const riskScore = computeRiskScore({
     settings: i.settings,
@@ -250,7 +273,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     consecutiveLosses: account.consecutiveLosses,
     recentPnl: account.recentPnl,
     calibration: i.calibration,
-    baseThreshold: SAFETY_CONSTANTS.MIN_CONFIDENCE,
+    baseThreshold: confidenceFloor,
     environmentTrackRecord: i.environmentTrackRecord ?? null,
   });
 
@@ -294,6 +317,8 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     macro: i.macro,
     riskScore,
     finalThreshold: adaptive.confidenceThreshold,
+    gateFloor: confidenceFloor,
+    weights: (i.compositeWeights ?? undefined) as any,
     volume: i.quant?.volume,
     volatility: i.quant?.volatility,
     momentum: i.quant?.momentum,
@@ -321,6 +346,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     macro: i.macro,
     composite,
     challenge: { enforced: i.challenge.enforced, status: i.challenge.status },
+    researchConfidenceFloor: i.researchConfidenceFloor ?? null,
   });
 
   const killSwitchTrip = evaluateKillSwitch({

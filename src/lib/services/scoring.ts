@@ -64,6 +64,29 @@ interface Input {
    * go below the configured floor.
    */
   finalThreshold?: number;
+  /**
+   * RESEARCH ONLY. Calibration/replay harness may evaluate the pillar blend
+   * below the live floor to measure what the gate is filtering out. Live
+   * callers never set this, so the effective floor stays CONFIDENCE_GATES.FINAL.
+   */
+  gateFloor?: number;
+  /** Optional pillar-weight overrides (calibration harness). */
+  weights?: Partial<Record<keyof typeof WEIGHTS, number>>;
+}
+
+/** Merge weight overrides and renormalise so the blend still sums to 1. */
+export function resolveCompositeWeights(
+  overrides?: Partial<Record<keyof typeof WEIGHTS, number>>,
+): Record<keyof typeof WEIGHTS, number> {
+  const merged = { ...WEIGHTS } as Record<keyof typeof WEIGHTS, number>;
+  for (const k of Object.keys(merged) as (keyof typeof WEIGHTS)[]) {
+    const v = Number(overrides?.[k]);
+    if (Number.isFinite(v) && v >= 0) merged[k] = v;
+  }
+  const sum = Object.values(merged).reduce((a, b) => a + b, 0);
+  if (!sum) return { ...WEIGHTS };
+  for (const k of Object.keys(merged) as (keyof typeof WEIGHTS)[]) merged[k] = merged[k] / sum;
+  return merged;
 }
 
 
@@ -80,9 +103,11 @@ export function directionalNewsScore(macro: MacroReport | null, direction?: "BUY
 export function computeComposite({
   confluence, analysis, macro, riskScore,
   volume, volatility, momentum, session, correlation, candleQuality,
-  finalThreshold,
+  finalThreshold, gateFloor, weights,
 }: Input): CompositeConfidence {
-  const gateFinal = Math.max(CONFIDENCE_GATES.FINAL, Math.round(finalThreshold ?? CONFIDENCE_GATES.FINAL));
+  const floor = Number.isFinite(gateFloor as number) ? (gateFloor as number) : CONFIDENCE_GATES.FINAL;
+  const W = resolveCompositeWeights(weights);
+  const gateFinal = Math.max(floor, Math.round(finalThreshold ?? floor));
 
   const setup = analysis?.setup ?? null;
   const direction: "BUY" | "SELL" | null = setup?.direction ?? null;
@@ -127,8 +152,8 @@ export function computeComposite({
     key: k,
     label: LABELS[k],
     score: scores[k],
-    weight: WEIGHTS[k],
-    contribution: +(scores[k] * WEIGHTS[k]).toFixed(1),
+    weight: W[k],
+    contribution: +(scores[k] * W[k]).toFixed(1),
     notes: notesFor[k],
   }));
 
@@ -141,7 +166,7 @@ export function computeComposite({
   );
 
   const gates = [
-    { key: "final", label: `Final confidence ≥ ${gateFinal}%`, passed: final >= gateFinal, detail: gateFinal > CONFIDENCE_GATES.FINAL ? `${final}% · bar raised from ${CONFIDENCE_GATES.FINAL}% by capital preservation` : `${final}%` },
+    { key: "final", label: `Final confidence ≥ ${gateFinal}%`, passed: final >= gateFinal, detail: gateFinal > floor ? `${final}% · bar raised from ${floor}% by capital preservation` : `${final}%` },
     { key: "technical", label: `Technical ≥ ${CONFIDENCE_GATES.TECHNICAL}%`, passed: technical >= CONFIDENCE_GATES.TECHNICAL, detail: `${technical}%` },
     { key: "news", label: `News / fundamental ≥ ${CONFIDENCE_GATES.NEWS}%`, passed: news >= CONFIDENCE_GATES.NEWS, detail: `${news}%` },
     { key: "rr", label: `Risk / reward ≥ 1:${CONFIDENCE_GATES.MIN_RR}`, passed: rr >= CONFIDENCE_GATES.MIN_RR, detail: rr ? `1:${rr.toFixed(2)}` : "no setup" },
