@@ -213,10 +213,12 @@ describe("position management transitions", () => {
     opened_at: new Date(0).toISOString(),
   };
 
-  it("moves to break-even once the trade is in profit by the trigger", () => {
+  it("moves to break-even (plus cost buffer) once the trade is in profit by the trigger", () => {
     const action = evaluatePosition({ trade, price: 2006, breakEvenTrigger: 0.5 });
-    expect(action).toMatchObject({ type: "move_stop", new_stop: 2000 });
+    expect(action.type).toBe("move_stop");
+    if (action.type === "move_stop") expect(action.new_stop).toBeGreaterThan(2000);
   });
+
 
   it("trails once beyond 1R and never widens the stop", () => {
     // Stop already locked in above entry, so the break-even branch is done
