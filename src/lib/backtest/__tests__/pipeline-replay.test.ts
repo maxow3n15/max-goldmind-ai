@@ -87,6 +87,27 @@ describe("point-in-time replay data", () => {
     expect(() => assertNoLookahead("test", candles, candles[5].t)).toThrow(/Lookahead leak/);
   });
 
+  it("exposes injected sub-execution series without ever leaking future candles", () => {
+    const base = synthCandles(320);
+    // A 5m series covering the same span, three candles per 15m bar.
+    const fine: typeof base = [];
+    for (const b of base) {
+      for (let k = 0; k < 3; k++) {
+        fine.push({ t: b.t + k * 300_000, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v / 3 });
+      }
+    }
+    const series = new PointInTimeSeries(base, "15", 300, { "5": fine });
+    expect(series.missingTimeframes()).not.toContain("5");
+    for (let i = 0; i < 260; i++) {
+      series.advance();
+      assertNoLookahead("5m", series.seriesFor("5"), series.time);
+    }
+    expect(series.seriesFor("5").length).toBeGreaterThan(0);
+    const mtf = buildMultiTimeframeReport(series.byTimeframe());
+    expect(mtf.missing).not.toContain("5");
+    expect(mtf.degraded).toBe(false);
+  });
+
   it("only reads history up to the bar being decided", () => {
     const candles = synthCandles(320);
     const series = new PointInTimeSeries(candles, "15");
