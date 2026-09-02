@@ -58,6 +58,59 @@ export interface PipelineBacktestConfig {
   /** Bars consumed before the first decision, so structure is populated. */
   warmupBars: number;
   settings: Partial<ReplaySettings>;
+  /** Structured-confidence factor weights under test (calibration). */
+  confidenceWeights?: Record<string, number> | null;
+  /** Composite pillar weights under test (calibration). */
+  compositeWeights?: Record<string, number> | null;
+  /** Exit parameters under test. */
+  exits?: { breakEvenAtR?: number; trailAtrMultiple?: number } | null;
+  /**
+   * RESEARCH ONLY. Measurement floor for the confidence gate. Omit for a
+   * faithful replay at the live 88% floor; the calibration harness lowers it
+   * to observe the population of setups the gate rejects. It changes nothing
+   * in live trading.
+   */
+  researchConfidenceFloor?: number | null;
+}
+
+export interface ModelStats {
+  model: string;
+  trades: number;
+  wins: number;
+  winRate: number;
+  expectancyR: number;
+  netPnl: number;
+  /** False when fewer than 30 closed trades — not statistically meaningful. */
+  sufficientSample: boolean;
+}
+
+export const MIN_MEANINGFUL_SAMPLE = 30;
+
+export function summariseByModel(trades: SimTrade[]): ModelStats[] {
+  const buckets = new Map<string, SimTrade[]>();
+  for (const t of trades) {
+    const k = t.model ?? "UNKNOWN";
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k)!.push(t);
+  }
+  return [...buckets.entries()]
+    .map(([model, list]) => {
+      const wins = list.filter((t) => t.pnl > 0).length;
+      const netPnl = Number(list.reduce((a, t) => a + t.pnl, 0).toFixed(2));
+      const expectancyR = list.length
+        ? Number((list.reduce((a, t) => a + (t.rMultiple ?? 0), 0) / list.length).toFixed(3))
+        : 0;
+      return {
+        model,
+        trades: list.length,
+        wins,
+        winRate: list.length ? Number(((wins / list.length) * 100).toFixed(1)) : 0,
+        expectancyR,
+        netPnl,
+        sufficientSample: list.length >= MIN_MEANINGFUL_SAMPLE,
+      };
+    })
+    .sort((a, b) => b.trades - a.trades);
 }
 
 export const DEFAULT_PIPELINE_CONFIG: Omit<PipelineBacktestConfig, "timeframe"> = {
@@ -79,6 +132,8 @@ export interface PipelineBacktestResult extends BacktestResult {
   approvedBars: number;
   /** Setup models actually traded. */
   models: { model: string; trades: number }[];
+  /** Per-setup-model validity: win rate, expectancy and sample size. */
+  modelStats: ModelStats[];
   caveats: string[];
   missingTimeframes: TimeframeKey[];
   /** Distribution of the deterministic confidence on candidate bars. */
@@ -205,6 +260,21 @@ export function runPipelineBacktest(
   const cfg = config;
   const settings = buildReplaySettings(cfg.settings);
   const series = new PointInTimeSeries(candles, cfg.timeframe);
+  // Exit parameters under test are expressed through the same management
+  // recommendation object the live volatility engine produces.
+  const managementPlan =
+    cfg.exits && (cfg.exits.breakEvenAtR != null || cfg.exits.trailAtrMultiple != null)
+      ? {
+          break_even_at_r: cfg.exits.breakEvenAtR ?? 0.5,
+          partial_at_r: 1,
+          partial_fraction: 0.5,
+          trail_atr_multiple: cfg.exits.trailAtrMultiple ?? 1.5,
+          suggested_stop_distance: null,
+          hold_winner: false,
+          early_exit: false,
+          notes: [],
+        }
+      : null;
   const atr = atrSeries(candles, 14);
 
   let balance = cfg.startingBalance;
@@ -306,7 +376,7 @@ export function runPipelineBacktest(
       openTrades: open.map(asOpenTrade),
       price: bar.c,
       atr: barAtr,
-      management: null,
+      management: managementPlan,
     });
     for (const a of actions) {
       const leg = open.find((l) => l.id === a.trade.id);
@@ -354,6 +424,9 @@ export function runPipelineBacktest(
           ? cfg.correlation.reportAt(bar.t, proposal?.direction ?? null)
           : null,
         cycleId: `replay-${i}`,
+        confidenceWeights: cfg.confidenceWeights ?? null,
+        compositeWeights: cfg.compositeWeights ?? null,
+        researchConfidenceFloor: cfg.researchConfidenceFloor ?? null,
       }),
     );
 
@@ -451,6 +524,7 @@ export function runPipelineBacktest(
       .slice(0, 12),
     candidateBars,
     approvedBars,
+    modelStats: summariseByModel(trades),
     models: [...models.entries()].map(([model, count]) => ({ model, trades: count })).sort((a, b) => b.trades - a.trades),
     caveats: cfg.caveats ?? FIDELITY_CAVEATS,
     missingTimeframes: series.missingTimeframes(),
