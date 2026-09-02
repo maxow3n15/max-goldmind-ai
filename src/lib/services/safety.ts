@@ -32,6 +32,12 @@ export interface SafetyInput {
   structuredConfidence?: number | null;
   /** Multi-timeframe agreement, 0..100. */
   mtfAlignment?: number | null;
+  /**
+   * RESEARCH ONLY — replay/calibration harness. Lets a backtest measure what
+   * the confidence gate rejects. Never set by live code, so the production
+   * floor remains CONFIDENCE_GATES.FINAL.
+   */
+  researchConfidenceFloor?: number | null;
 }
 
 
@@ -60,7 +66,11 @@ export function runSafety(i: SafetyInput): SafetyReport {
   const s = i.settings ?? {};
   const openTrades = Array.isArray(i.openTrades) ? i.openTrades : [];
 
-  const minConfidence = Math.max(MIN_CONFIDENCE, num(s.confidence_threshold, MIN_CONFIDENCE));
+  const floor =
+    i.researchConfidenceFloor != null && Number.isFinite(Number(i.researchConfidenceFloor))
+      ? Number(i.researchConfidenceFloor)
+      : MIN_CONFIDENCE;
+  const minConfidence = Math.max(floor, num(s.confidence_threshold, floor));
   const minRr = Math.max(MIN_RR, num(s.min_risk_reward, MIN_RR));
   const maxSpread = Math.min(MAX_SPREAD, num(s.max_spread, MAX_SPREAD));
   const dq = i.dataQuality ?? classifyDataQuality(i.quote, i.connection);
