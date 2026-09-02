@@ -427,6 +427,18 @@ export function runPipelineBacktest(
         confidenceWeights: cfg.confidenceWeights ?? null,
         compositeWeights: cfg.compositeWeights ?? null,
         researchConfidenceFloor: cfg.researchConfidenceFloor ?? null,
+        // Loss-streak lockout is measured from the start of the current day —
+        // live it latches until an operator clears it, which a replay cannot do.
+        researchConsecutiveLosses: (() => {
+          let n = 0;
+          for (let k = closed.length - 1; k >= 0; k--) {
+            const c = closed[k];
+            if (new Date(c.closedAt).toISOString().slice(0, 10) !== dayKey) break;
+            if (c.pnl < 0) n += 1;
+            else break;
+          }
+          return n;
+        })(),
       }),
     );
 

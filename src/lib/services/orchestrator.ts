@@ -196,6 +196,13 @@ export interface OrchestratorInput {
    * this undefined and the floor stays SAFETY_CONSTANTS.MIN_CONFIDENCE.
    */
   researchConfidenceFloor?: number | null;
+  /**
+   * RESEARCH ONLY — replay harness. The consecutive-loss lockout latches until
+   * an operator resets it; a multi-year replay has no operator, so the harness
+   * supplies the streak measured since the current session started. Live
+   * callers omit this and the derived streak is used unchanged.
+   */
+  researchConsecutiveLosses?: number | null;
   /** Session extreme sweep from the deterministic liquidity read. */
   sessionSweep?: { side: "buy_side" | "sell_side"; reclaimed: boolean; t: number } | null;
   /**
@@ -235,7 +242,11 @@ export interface OrchestratorDecision {
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
   const now = i.now ?? Date.now();
-  const account = deriveAccountState(i.trades, i.snapshot, now);
+  const derived = deriveAccountState(i.trades, i.snapshot, now);
+  const account: AccountState =
+    i.researchConsecutiveLosses != null && Number.isFinite(Number(i.researchConsecutiveLosses))
+      ? { ...derived, consecutiveLosses: Number(i.researchConsecutiveLosses) }
+      : derived;
   const s: any = i.settings ?? {};
 
   const environment = classifyEnvironment(i.quant, i.macro);
