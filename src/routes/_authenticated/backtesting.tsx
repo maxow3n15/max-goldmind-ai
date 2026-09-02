@@ -7,6 +7,7 @@ import { FlaskConical, Play, Trash2, TrendingUp, ShieldAlert } from "lucide-reac
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { runBacktestFn, listBacktestRuns, deleteBacktestRun, PERIODS_BY_TIMEFRAME } from "@/lib/backtest.functions";
 import { FIDELITY_CAVEATS } from "@/lib/backtest/pipeline-adapter";
+import { CalibrationReportPanel } from "@/components/CalibrationReportPanel";
 
 export const Route = createFileRoute("/_authenticated/backtesting")({
   component: BacktestingPage,
@@ -113,6 +114,8 @@ function BacktestingPage() {
           engine that guards live execution, so results reflect your actual limits.
         </p>
       </header>
+
+      <CalibrationReportPanel />
 
       <div className="glass-panel rounded-xl p-5 space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
