@@ -377,7 +377,7 @@ export function runPipelineBacktest(
     /* ---- 6. fill the ladder at the decision bar's close ---------------- */
     decision.plans.forEach((plan, legIndex) => {
       const isBuy = plan.direction === "BUY";
-      const fill = Number((bar.c + (isBuy ? cfg.spread / 2 : -cfg.spread / 2)).toFixed(2));
+      const fill = Number((bar.c + (isBuy ? barSpread / 2 : -barSpread / 2)).toFixed(2));
       sequence += 1;
       open.push({
         id: `leg-${i}-${legIndex}-${sequence}`,
@@ -452,7 +452,7 @@ export function runPipelineBacktest(
     candidateBars,
     approvedBars,
     models: [...models.entries()].map(([model, count]) => ({ model, trades: count })).sort((a, b) => b.trades - a.trades),
-    caveats: FIDELITY_CAVEATS,
+    caveats: cfg.caveats ?? FIDELITY_CAVEATS,
     missingTimeframes: series.missingTimeframes(),
   };
 }
