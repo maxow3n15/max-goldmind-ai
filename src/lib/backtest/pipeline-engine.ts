@@ -24,6 +24,7 @@ import type { Direction } from "@/lib/services/types";
 
 import { PointInTimeSeries } from "./replay-data";
 import { proposeFromStructure, type ReplayProposal } from "./proposal";
+import { ReplayCorrelation } from "./replay-correlation";
 import {
   buildOrchestratorInput,
   buildReplaySettings,
@@ -46,6 +47,12 @@ export interface PipelineBacktestConfig {
   costPerTrade: number;
   /** Quoted spread used for the synthetic quote and the entry fill. */
   spread: number;
+  /** Optional per-bar spread series (broker bid/ask), index-aligned with candles. */
+  spreads?: number[];
+  /** Optional point-in-time correlation built from real historical series. */
+  correlation?: ReplayCorrelation | null;
+  /** Extra fidelity notes describing the data source actually used. */
+  caveats?: string[];
   /** Bars a position may stay open before it is force-closed. */
   maxHoldBars: number;
   /** Bars consumed before the first decision, so structure is populated. */
@@ -287,6 +294,12 @@ export function runPipelineBacktest(
       daily: series.seriesFor("D"),
     });
     const barAtr = Number.isFinite(atr[i]) ? atr[i] : structure.atr;
+    // Broker bid/ask history gives the spread this bar actually quoted; the
+    // configured constant is only the fallback.
+    const barSpread =
+      cfg.spreads && Number.isFinite(cfg.spreads[i]) && cfg.spreads[i] > 0
+        ? cfg.spreads[i]
+        : cfg.spread;
 
     /* ---- 4. manage open positions on the close ------------------------ */
     const actions = planPositionActions({
@@ -336,7 +349,10 @@ export function runPipelineBacktest(
         dailyPnl,
         weeklyPnl,
         settings,
-        spread: cfg.spread,
+        spread: barSpread,
+        correlation: cfg.correlation
+          ? cfg.correlation.reportAt(bar.t, proposal?.direction ?? null)
+          : null,
         cycleId: `replay-${i}`,
       }),
     );
@@ -361,7 +377,7 @@ export function runPipelineBacktest(
     /* ---- 6. fill the ladder at the decision bar's close ---------------- */
     decision.plans.forEach((plan, legIndex) => {
       const isBuy = plan.direction === "BUY";
-      const fill = Number((bar.c + (isBuy ? cfg.spread / 2 : -cfg.spread / 2)).toFixed(2));
+      const fill = Number((bar.c + (isBuy ? barSpread / 2 : -barSpread / 2)).toFixed(2));
       sequence += 1;
       open.push({
         id: `leg-${i}-${legIndex}-${sequence}`,
@@ -436,7 +452,7 @@ export function runPipelineBacktest(
     candidateBars,
     approvedBars,
     models: [...models.entries()].map(([model, count]) => ({ model, trades: count })).sort((a, b) => b.trades - a.trades),
-    caveats: FIDELITY_CAVEATS,
+    caveats: cfg.caveats ?? FIDELITY_CAVEATS,
     missingTimeframes: series.missingTimeframes(),
   };
 }

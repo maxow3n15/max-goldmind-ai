@@ -66,6 +66,8 @@ function BacktestingPage() {
   const [costPerTrade, setCost] = useState(0.35);
   const [useTrailingStop, setTrail] = useState(true);
   const [londonNyOnly, setSessions] = useState(true);
+  const [dataSource, setDataSource] = useState<"yahoo" | "broker">("yahoo");
+  const [realCorrelation, setRealCorrelation] = useState(true);
   const [result, setResult] = useState<any | null>(null);
 
   const runs = useQuery({ queryKey: ["backtest-runs"], queryFn: () => listFn() });
@@ -77,6 +79,8 @@ function BacktestingPage() {
           mode, timeframe, period: (periodOptions.includes(period) ? period : periodOptions[0]) as any,
           startingBalance, riskPerTradePct, rrTarget,
           atrStopMultiple, minConfidence, costPerTrade, useTrailingStop, londonNyOnly, save: true,
+          dataSource: mode === "pipeline" ? dataSource : "yahoo",
+          realCorrelation: mode === "pipeline" ? realCorrelation : false,
         },
       }),
     onSuccess: (res: any) => {
@@ -128,6 +132,34 @@ function BacktestingPage() {
             </button>
           ))}
         </div>
+
+        {mode === "pipeline" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs space-y-1.5">
+              <span className="text-muted-foreground">Candle source</span>
+              <select value={dataSource} onChange={(e) => setDataSource(e.target.value as any)}
+                className="w-full bg-background border border-border rounded-md px-2 py-2 text-sm">
+                <option value="yahoo">Public mid-price candles (no spread data)</option>
+                <option value="broker">Connected broker — OANDA bid/ask, real spreads &amp; specs</option>
+              </select>
+              <span className="block text-[10px] text-muted-foreground">
+                Broker history uses your default OANDA connection: per-bar spreads and the instrument's
+                real volume step, margin rate and account currency.
+              </span>
+            </label>
+            <label className="text-xs space-y-1.5">
+              <span className="text-muted-foreground">Correlation pillar</span>
+              <div className="flex items-center gap-2 rounded-md border border-border px-2 py-2">
+                <input type="checkbox" checked={realCorrelation}
+                  onChange={(e) => setRealCorrelation(e.target.checked)} />
+                <span className="text-sm">Rebuild from real historical DXY / yields / silver / indices</span>
+              </div>
+              <span className="block text-[10px] text-muted-foreground">
+                Macro news and sentiment stay neutralised — no point-in-time news archive exists.
+              </span>
+            </label>
+          </div>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-xs space-y-1.5">

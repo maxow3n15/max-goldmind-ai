@@ -31,9 +31,18 @@ const RunInput = z.object({
   costPerTrade: z.number().min(0).max(5).default(0.35),
   useTrailingStop: z.boolean().default(true),
   londonNyOnly: z.boolean().default(true),
+  /** "yahoo" = mid-price public data; "broker" = connected OANDA bid/ask history. */
+  dataSource: z.enum(["yahoo", "broker"]).default("yahoo"),
+  /** Rebuild the correlation pillar from real historical cross-market series. */
+  realCorrelation: z.boolean().default(true),
   label: z.string().max(80).optional(),
   save: z.boolean().default(true),
 });
+
+/** Approximate calendar days each period label represents, for broker paging. */
+const PERIOD_DAYS: Record<string, number> = {
+  "1mo": 30, "60d": 60, "3mo": 90, "6mo": 180, "1y": 365, "2y": 730,
+};
 
 const INTERVALS: Record<string, string> = { "5": "5m", "15": "15m", "30": "30m", "60": "60m", "240": "1h" };
 
@@ -53,12 +62,52 @@ export const runBacktestFn = createServerFn({ method: "POST" })
       };
     }
 
-    const candles = await fetchCandles(
-      GOLD_SYMBOL,
-      INTERVALS[data.timeframe] ?? "15m",
-      data.period,
-      300_000,
-    );
+    const usingBroker = data.dataSource === "broker" && data.mode === "pipeline";
+    let candles: Awaited<ReturnType<typeof fetchCandles>> = [];
+    let brokerData: { instrument: string; environment: string; averageSpread: number } | null = null;
+    let barSpreads: number[] | undefined;
+
+    if (usingBroker) {
+      try {
+        const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+          await import("@/lib/brokers/live-execution.server");
+        const conn = await loadDefaultBrokerConnection(context.supabase, context.userId);
+        if (conn.broker_id !== "oanda") {
+          return {
+            ok: false as const,
+            reason: `Broker history is only available for OANDA; your default connection is "${conn.broker_id}".`,
+          };
+        }
+        const resolved = await resolveConnectionEnvironment(conn);
+        const { fetchOandaHistory } = await import("@/lib/backtest/oanda-history.server");
+        const history = await fetchOandaHistory({
+          credentials: resolved.credentials,
+          environment: resolved.env.endsWith("_live") ? "live" : "practice",
+          timeframe: data.timeframe,
+          days: PERIOD_DAYS[data.period] ?? 30,
+        });
+        candles = history.candles;
+        barSpreads = history.spreads;
+        brokerData = {
+          instrument: history.instrument,
+          environment: history.environment,
+          averageSpread: history.averageSpread,
+        };
+      } catch (e: any) {
+        return {
+          ok: false as const,
+          reason: `Broker history unavailable: ${String(e?.message ?? e).slice(0, 200)}`,
+        };
+      }
+    } else {
+      candles = await fetchCandles(
+        GOLD_SYMBOL,
+        INTERVALS[data.timeframe] ?? "15m",
+        data.period,
+        300_000,
+      );
+    }
+
     if (candles.length < 250) {
       return { ok: false as const, reason: "Not enough historical candles for this timeframe and period." };
     }
@@ -84,11 +133,26 @@ export const runBacktestFn = createServerFn({ method: "POST" })
     let result: BacktestResult;
     if (data.mode === "pipeline") {
       const { runPipelineBacktest, DEFAULT_PIPELINE_CONFIG } = await import("@/lib/backtest/pipeline-engine");
+      const { buildFidelityCaveats } = await import("@/lib/backtest/pipeline-adapter");
+
+      // Correlation is the one non-technical pillar with a real archive: the
+      // correlated markets themselves have price history.
+      let correlation = null as any;
+      if (data.realCorrelation) {
+        const { ReplayCorrelation, loadCorrelationSeries } = await import("@/lib/backtest/replay-correlation");
+        const series = await loadCorrelationSeries(INTERVALS[data.timeframe] ?? "15m", data.period);
+        if (series.length) correlation = new ReplayCorrelation(series);
+      }
+
       result = runPipelineBacktest(candles, {
         ...DEFAULT_PIPELINE_CONFIG,
         timeframe: data.timeframe as any,
         startingBalance: data.startingBalance,
         costPerTrade: data.costPerTrade,
+        spread: brokerData?.averageSpread || DEFAULT_PIPELINE_CONFIG.spread,
+        spreads: barSpreads,
+        correlation,
+        caveats: buildFidelityCaveats({ realCorrelation: !!correlation, brokerData }),
         settings: {
           risk_per_trade: data.riskPerTradePct,
           min_risk_reward: data.rrTarget,

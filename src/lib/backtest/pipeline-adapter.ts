@@ -47,6 +47,23 @@ import type { ReplayProposal } from "./proposal";
  */
 export const NEUTRAL_PILLAR_SCORE = CONFIDENCE_GATES.FINAL;
 
+export function buildFidelityCaveats(opts: {
+  realCorrelation?: boolean;
+  brokerData?: { instrument: string; environment: string; averageSpread: number } | null;
+} = {}): string[] {
+  const out = [...FIDELITY_CAVEATS];
+  if (opts.realCorrelation) {
+    out[1] =
+      "Cross-market correlation (SMT) is reconstructed from real historical DXY / yields / silver / equity series at each bar (no lookahead).";
+  }
+  if (opts.brokerData) {
+    out.push(
+      `Candles, per-bar spreads and instrument specification come from the connected broker (${opts.brokerData.instrument}, ${opts.brokerData.environment}, average spread ${opts.brokerData.averageSpread}).`,
+    );
+  }
+  return out;
+}
+
 export const FIDELITY_CAVEATS: string[] = [
   `Macro / news and sentiment pillars are neutralised at ${NEUTRAL_PILLAR_SCORE} — no point-in-time news archive exists, so fundamentals neither help nor block a setup.`,
   `Cross-market correlation (SMT) is neutralised at ${NEUTRAL_PILLAR_SCORE} in the composite and reported as unavailable to the structured confidence engine.`,
@@ -98,6 +115,7 @@ export function buildReplayQuant(i: {
   timeframe: string;
   direction: Direction | null;
   now: number;
+  correlation?: CorrelationReport | null;
 }): QuantIntel {
   const volume = analyseVolume(i.candles, i.direction);
   const volatility = analyseVolatility(i.candles);
@@ -111,7 +129,7 @@ export function buildReplayQuant(i: {
     volatility,
     momentum,
     candles,
-    correlation: buildReplayCorrelation(),
+    correlation: i.correlation ?? buildReplayCorrelation(),
     degraded: false,
   };
 }
@@ -178,6 +196,8 @@ export interface ReplayBarContext {
   settings: ReplaySettings;
   spread: number;
   cycleId: string;
+  /** Point-in-time correlation, when real historical series are available. */
+  correlation?: CorrelationReport | null;
 }
 
 /** Analysis object standing in for the AI response. */
@@ -225,6 +245,7 @@ export function buildOrchestratorInput(ctx: ReplayBarContext): OrchestratorInput
     timeframe: ctx.timeframe,
     direction,
     now,
+    correlation: ctx.correlation ?? null,
   });
   const sessionReport: SessionReport = analyseSessions(ctx.tradeRows, session);
   const sweep = ctx.liquidity?.sweeps?.[0] ?? null;
