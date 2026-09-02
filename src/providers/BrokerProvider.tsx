@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getAccountSnapshot, listTrades } from "@/lib/trades.functions";
+import { useSupabaseSession } from "@/hooks/useSupabaseSession";
 import { getUserSettings } from "@/lib/settings.functions";
 import { listBrokerConnections } from "@/lib/brokers.functions";
 
@@ -59,13 +60,16 @@ export function BrokerProvider({ children }: { children: ReactNode }) {
   const settingsFn = useServerFn(getUserSettings);
   const brokersFn = useServerFn(listBrokerConnections);
 
-  const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
-  const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
-  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn() });
+  const { isAuthenticated } = useSupabaseSession();
+
+  const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000, enabled: isAuthenticated });
+  const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000, enabled: isAuthenticated });
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn(), enabled: isAuthenticated });
   const brokers = useQuery({
     queryKey: ["broker-connections"],
     queryFn: () => brokersFn(),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   });
 
   const tradingMode: "paper" | "live" =
