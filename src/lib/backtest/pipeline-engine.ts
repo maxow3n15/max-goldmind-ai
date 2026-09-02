@@ -49,6 +49,11 @@ export interface PipelineBacktestConfig {
   spread: number;
   /** Optional per-bar spread series (broker bid/ask), index-aligned with candles. */
   spreads?: number[];
+  /**
+   * Independently fetched historical series for timeframes finer than the
+   * execution resolution. Without these the MTF report is always degraded.
+   */
+  finerSeries?: Partial<Record<TimeframeKey, Candle[]>>;
   /** Optional point-in-time correlation built from real historical series. */
   correlation?: ReplayCorrelation | null;
   /** Extra fidelity notes describing the data source actually used. */
@@ -267,7 +272,7 @@ export function runPipelineBacktest(
 ): PipelineBacktestResult {
   const cfg = config;
   const settings = buildReplaySettings(cfg.settings);
-  const series = new PointInTimeSeries(candles, cfg.timeframe);
+  const series = new PointInTimeSeries(candles, cfg.timeframe, undefined, cfg.finerSeries);
   // Exit parameters under test are expressed through the same management
   // recommendation object the live volatility engine produces.
   const managementPlan =
