@@ -51,6 +51,24 @@ interface RulesInput {
   atr?: number | null;
   /** Volatility/momentum-derived management plan. */
   plan?: ManagementRecommendation | null;
+  /**
+   * Break-even is placed this fraction of initial risk beyond entry rather than
+   * exactly at entry, so the protected trade covers its own costs and never
+   * sits at literally zero risk.
+   */
+  breakEvenBuffer?: number;
+}
+
+/**
+ * Initial risk per unit — measured from the stop the trade was OPENED with.
+ * Using the live stop here is the classic bug: the manager moves the stop,
+ * risk collapses toward zero, and every R-based threshold drifts.
+ */
+export function initialRisk(trade: OpenTrade): number {
+  const initial = trade.initial_stop_loss;
+  const anchor = initial != null && Number.isFinite(initial) ? Number(initial) : trade.stop_loss;
+  const risk = Math.abs(trade.entry_price - anchor);
+  return Number.isFinite(risk) && risk > 0 ? risk : 0;
 }
 
 export function evaluate({
@@ -60,14 +78,19 @@ export function evaluate({
   trailFraction = 0.5,
   atr,
   plan,
+  breakEvenBuffer = 0.05,
 }: RulesInput): ManagementAction {
   const isBuy = trade.direction === "BUY";
-  const risk = Math.abs(trade.entry_price - trade.stop_loss);
-  if (!Number.isFinite(price) || price <= 0 || risk <= 0) return { type: "none" };
+  if (!Number.isFinite(price) || price <= 0) return { type: "none" };
 
+  // Risk is anchored to the opening stop, so it stays constant for the life of
+  // the trade. A zero here only disables the R-based branches below — the exit
+  // checks still run, so a trade is never left unmanaged.
+  const risk = initialRisk(trade);
   const profitDistance = isBuy ? price - trade.entry_price : trade.entry_price - price;
-  const rMultiple = profitDistance / risk;
+  const rMultiple = risk > 0 ? profitDistance / risk : 0;
   const beAtR = breakEvenTrigger ?? plan?.break_even_at_r ?? 0.5;
+
 
   // 1. Hard stop hit → close immediately.
   if (isBuy ? price <= trade.stop_loss : price >= trade.stop_loss) {
