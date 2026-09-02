@@ -600,6 +600,7 @@ export type Database = {
           excursion_updated_at: string | null
           exit_price: number | null
           id: string
+          initial_stop_loss: number | null
           lot_size: number
           mae: number | null
           mae_r: number | null
@@ -633,6 +634,7 @@ export type Database = {
           excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
+          initial_stop_loss?: number | null
           lot_size?: number
           mae?: number | null
           mae_r?: number | null
@@ -666,6 +668,7 @@ export type Database = {
           excursion_updated_at?: string | null
           exit_price?: number | null
           id?: string
+          initial_stop_loss?: number | null
           lot_size?: number
           mae?: number | null
           mae_r?: number | null
