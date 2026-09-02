@@ -16,13 +16,24 @@ export interface OpenTrade {
   id: string;
   direction: Direction;
   entry_price: number;
+  /**
+   * Current protective stop — moved by the manager over the life of the trade.
+   * Never use this to measure R: once it reaches entry the distance is zero.
+   */
   stop_loss: number;
+  /**
+   * The stop the trade was opened with. Fixed for the life of the trade and the
+   * only correct denominator for R-multiples. Falls back to `stop_loss` when a
+   * legacy row predates the column.
+   */
+  initial_stop_loss?: number | null;
   take_profit_1: number | null;
   take_profit_2: number | null;
   take_profit_3: number | null;
   lot_size: number;
   opened_at: string;
 }
+
 
 export type ManagementAction =
   | { type: "close"; reason: string; price: number }
