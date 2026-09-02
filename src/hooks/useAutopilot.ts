@@ -53,6 +53,7 @@ import type {
   TradePlan,
 } from "@/lib/services/types";
 import { currentSession } from "@/lib/format";
+import { useSupabaseSession } from "@/hooks/useSupabaseSession";
 
 interface Options {
   timeframe: string;
@@ -61,6 +62,7 @@ interface Options {
 
 export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options) {
   const qc = useQueryClient();
+  const { isAuthenticated } = useSupabaseSession();
   const market = useMarketData({ intervalMs: 3000 });
 
   const analyzeFn = useServerFn(analyzeMarket);
@@ -73,13 +75,14 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["macro-intel"],
     queryFn: () => macroFn() as Promise<MacroReport>,
     refetchInterval: 5 * 60_000,
+    enabled: isAuthenticated,
     staleTime: 4 * 60_000,
   });
   const macro = (macroQuery.data ?? null) as MacroReport | null;
 
-  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn(), refetchInterval: 20_000 });
-  const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000 });
-  const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000 });
+  const settings = useQuery({ queryKey: ["settings"], queryFn: () => settingsFn(), refetchInterval: 20_000, enabled: isAuthenticated });
+  const snapshot = useQuery({ queryKey: ["snapshot"], queryFn: () => snapFn(), refetchInterval: 15_000, enabled: isAuthenticated });
+  const trades = useQuery({ queryKey: ["trades"], queryFn: () => tradesFn(), refetchInterval: 10_000, enabled: isAuthenticated });
 
   // Funded-account compliance. When no challenge account exists this stays
   // null and the engine behaves exactly as before.
@@ -88,6 +91,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["challenge-status", null],
     queryFn: () => challengeFn({ data: {} }),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   });
   const challengeProfile: any = challengeQuery.data?.profile ?? null;
   const challengeStatus = (challengeQuery.data?.status ?? null) as ChallengeStatus | null;
@@ -121,6 +125,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["quant-intel", timeframe, setupDirection],
     queryFn: () => quantFn({ data: { timeframe, direction: setupDirection } }) as Promise<QuantIntel>,
     refetchInterval: 60_000,
+    enabled: isAuthenticated,
     staleTime: 45_000,
     placeholderData: (prev) => prev,
   });
@@ -148,6 +153,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["broker-connections"],
     queryFn: () => brokersFn(),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
   });
   const defaultBroker = useMemo(() => {
     const rows: any[] = Array.isArray(brokersQuery.data) ? brokersQuery.data : [];
@@ -210,6 +216,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["forensics"],
     queryFn: () => forensicsFn(),
     refetchInterval: 120_000,
+    enabled: isAuthenticated,
     staleTime: 60_000,
   });
 
@@ -219,6 +226,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["learning-insights"],
     queryFn: () => learningFn(),
     refetchInterval: 300_000,
+    enabled: isAuthenticated,
     staleTime: 240_000,
   });
 
@@ -230,6 +238,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
     queryKey: ["market-structure", timeframe],
     queryFn: () => structureFn({ data: { timeframe } }),
     refetchInterval: 30_000,
+    enabled: isAuthenticated,
     staleTime: 20_000,
   });
   const structure = (structureQuery.data as any) ?? null;
