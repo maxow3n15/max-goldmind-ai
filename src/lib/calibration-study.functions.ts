@@ -21,6 +21,31 @@ const GOLD_SYMBOL = "GC=F";
 const INTERVALS: Record<string, string> = { "15": "15m", "30": "30m", "60": "60m", "240": "1h" };
 const RANGES: Record<string, string> = { "15": "60d", "30": "60d", "60": "2y", "240": "2y" };
 
+/**
+ * Timeframes below the execution resolution cannot be reconstructed by
+ * aggregation, so they are fetched as independent historical series — the same
+ * thing the live path does. Without them `mtf.degraded` is true on every bar
+ * and the 15-point HTF-alignment factor is excluded from every score.
+ */
+const FINER: Record<string, { tf: string; interval: string; range: string }[]> = {
+  "15": [
+    { tf: "5", interval: "5m", range: "60d" },
+    { tf: "1", interval: "1m", range: "7d" },
+  ],
+  "30": [
+    { tf: "15", interval: "15m", range: "60d" },
+    { tf: "5", interval: "5m", range: "60d" },
+  ],
+  "60": [
+    { tf: "30", interval: "30m", range: "60d" },
+    { tf: "15", interval: "15m", range: "60d" },
+  ],
+  "240": [
+    { tf: "60", interval: "60m", range: "2y" },
+    { tf: "30", interval: "30m", range: "60d" },
+  ],
+};
+
 const Input = z.object({
   timeframe: z.enum(["15", "30", "60", "240"]).default("60"),
   chunks: z.number().int().min(4).max(8).default(4),
@@ -46,6 +71,9 @@ export interface ChunkReport {
   confidenceP90: number;
   confidenceMax: number;
   models: ModelStats[];
+  /** Data-fidelity diagnostics for this chunk. */
+  mtfDegradedFraction: number;
+  htfAlignmentVerdicts: { verdict: string; count: number }[];
 }
 
 export interface CalibrationStudy {
@@ -69,6 +97,13 @@ export interface CalibrationStudy {
   rejections: { reason: string; count: number }[];
   minMeaningfulSample: number;
   verdict: string;
+  /** Whether the replay's own market view was complete enough to score HTF. */
+  dataFidelity: {
+    finerSeriesLoaded: string[];
+    finerSeriesMissing: string[];
+    mtfDegradedFraction: number;
+    htfAlignmentVerdicts: { verdict: string; count: number }[];
+  };
   caveats: string[];
 }
 
@@ -120,6 +155,21 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
       return { ok: false as const, reason: "Not enough history for a walk-forward study on this timeframe." };
     }
 
+    // Independent per-timeframe history for everything below the execution
+    // resolution. Missing legs are reported, never faked.
+    const finerSeries: Record<string, any[]> = {};
+    const finerLoaded: string[] = [];
+    const finerMissing: string[] = [];
+    for (const spec of FINER[data.timeframe] ?? []) {
+      const c = await fetchCandles(GOLD_SYMBOL, spec.interval, spec.range, 300_000).catch(() => []);
+      if (c.length >= 200) {
+        finerSeries[spec.tf] = c;
+        finerLoaded.push(`${spec.tf}m (${c.length} bars, ${spec.range})`);
+      } else {
+        finerMissing.push(`${spec.tf}m`);
+      }
+    }
+
     let correlation: any = null;
     if (data.realCorrelation) {
       const { ReplayCorrelation, loadCorrelationSeries } = await import("@/lib/backtest/replay-correlation");
@@ -138,6 +188,7 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
         ...DEFAULT_PIPELINE_CONFIG,
         timeframe: data.timeframe as any,
         correlation,
+        finerSeries: finerSeries as any,
         researchConfidenceFloor: floor,
         settings: { confidence_threshold: floor },
         caveats: buildFidelityCaveats({ realCorrelation: !!correlation }),
@@ -160,6 +211,8 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
         confidenceP90: r.confidence.p90,
         confidenceMax: r.confidence.max,
         models: r.modelStats,
+        mtfDegradedFraction: r.dataFidelity.mtfDegradedFraction,
+        htfAlignmentVerdicts: r.dataFidelity.htfAlignmentVerdicts,
       });
     }
 
@@ -204,6 +257,23 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
       rejections: [...rejections.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count).slice(0, 10),
       minMeaningfulSample: MIN_MEANINGFUL_SAMPLE,
       verdict,
+      dataFidelity: {
+        finerSeriesLoaded: finerLoaded,
+        finerSeriesMissing: finerMissing,
+        mtfDegradedFraction: reports.length
+          ? Number(
+              (
+                reports.reduce((a, r) => a + r.mtfDegradedFraction * r.candidates, 0) /
+                Math.max(1, reports.reduce((a, r) => a + r.candidates, 0))
+              ).toFixed(4),
+            )
+          : 0,
+        htfAlignmentVerdicts: (() => {
+          const m = new Map<string, number>();
+          for (const r of reports) for (const v of r.htfAlignmentVerdicts) m.set(v.verdict, (m.get(v.verdict) ?? 0) + v.count);
+          return [...m.entries()].map(([verdict, count]) => ({ verdict, count })).sort((a, b) => b.count - a.count);
+        })(),
+      },
       caveats: buildFidelityCaveats({ realCorrelation: !!correlation }),
     } satisfies CalibrationStudy;
   });
