@@ -64,6 +64,8 @@ export function deriveAccountState(tradeRows: any[], snapshot: any | null, now?:
       direction: t.direction,
       entry_price: Number(t.entry_price),
       stop_loss: Number(t.stop_loss),
+      // Anchors R-multiples to the opening stop; legacy rows fall back to it.
+      initial_stop_loss: t.initial_stop_loss != null ? Number(t.initial_stop_loss) : Number(t.stop_loss),
       take_profit_1: t.take_profit_1 != null ? Number(t.take_profit_1) : null,
       take_profit_2: t.take_profit_2 != null ? Number(t.take_profit_2) : null,
       take_profit_3: t.take_profit_3 != null ? Number(t.take_profit_3) : null,

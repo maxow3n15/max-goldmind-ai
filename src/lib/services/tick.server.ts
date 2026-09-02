@@ -502,6 +502,7 @@ async function openTrade(
     direction: plan.direction,
     entry_price: plan.entry,
     stop_loss: plan.stop_loss,
+    initial_stop_loss: plan.stop_loss,
     take_profit_1: plan.take_profit_1 ?? null,
     take_profit_2: plan.take_profit_2 ?? null,
     take_profit_3: plan.take_profit_3 ?? null,

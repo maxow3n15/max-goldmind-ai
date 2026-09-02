@@ -16,13 +16,24 @@ export interface OpenTrade {
   id: string;
   direction: Direction;
   entry_price: number;
+  /**
+   * Current protective stop — moved by the manager over the life of the trade.
+   * Never use this to measure R: once it reaches entry the distance is zero.
+   */
   stop_loss: number;
+  /**
+   * The stop the trade was opened with. Fixed for the life of the trade and the
+   * only correct denominator for R-multiples. Falls back to `stop_loss` when a
+   * legacy row predates the column.
+   */
+  initial_stop_loss?: number | null;
   take_profit_1: number | null;
   take_profit_2: number | null;
   take_profit_3: number | null;
   lot_size: number;
   opened_at: string;
 }
+
 
 export type ManagementAction =
   | { type: "close"; reason: string; price: number }
@@ -40,6 +51,24 @@ interface RulesInput {
   atr?: number | null;
   /** Volatility/momentum-derived management plan. */
   plan?: ManagementRecommendation | null;
+  /**
+   * Break-even is placed this fraction of initial risk beyond entry rather than
+   * exactly at entry, so the protected trade covers its own costs and never
+   * sits at literally zero risk.
+   */
+  breakEvenBuffer?: number;
+}
+
+/**
+ * Initial risk per unit — measured from the stop the trade was OPENED with.
+ * Using the live stop here is the classic bug: the manager moves the stop,
+ * risk collapses toward zero, and every R-based threshold drifts.
+ */
+export function initialRisk(trade: OpenTrade): number {
+  const initial = trade.initial_stop_loss;
+  const anchor = initial != null && Number.isFinite(initial) ? Number(initial) : trade.stop_loss;
+  const risk = Math.abs(trade.entry_price - anchor);
+  return Number.isFinite(risk) && risk > 0 ? risk : 0;
 }
 
 export function evaluate({
@@ -49,14 +78,19 @@ export function evaluate({
   trailFraction = 0.5,
   atr,
   plan,
+  breakEvenBuffer = 0.05,
 }: RulesInput): ManagementAction {
   const isBuy = trade.direction === "BUY";
-  const risk = Math.abs(trade.entry_price - trade.stop_loss);
-  if (!Number.isFinite(price) || price <= 0 || risk <= 0) return { type: "none" };
+  if (!Number.isFinite(price) || price <= 0) return { type: "none" };
 
+  // Risk is anchored to the opening stop, so it stays constant for the life of
+  // the trade. A zero here only disables the R-based branches below — the exit
+  // checks still run, so a trade is never left unmanaged.
+  const risk = initialRisk(trade);
   const profitDistance = isBuy ? price - trade.entry_price : trade.entry_price - price;
-  const rMultiple = profitDistance / risk;
+  const rMultiple = risk > 0 ? profitDistance / risk : 0;
   const beAtR = breakEvenTrigger ?? plan?.break_even_at_r ?? 0.5;
+
 
   // 1. Hard stop hit → close immediately.
   if (isBuy ? price <= trade.stop_loss : price >= trade.stop_loss) {
@@ -85,13 +119,22 @@ export function evaluate({
     }
   }
 
-  // 4. Move to break-even once the trade has earned it.
+  // Steps 4 and 5 are the only R-based branches. Without a usable initial risk
+  // they are skipped, but the exit checks above have already run.
+  if (risk <= 0) return { type: "none" };
+
+  // 4. Move to break-even once the trade has earned it. The stop is placed a
+  // small buffer BEYOND entry, never exactly at it.
   if (rMultiple >= beAtR) {
-    const stopIsWorseThanEntry = isBuy
+    const buffer = risk * Math.max(0, breakEvenBuffer);
+    const target = isBuy ? trade.entry_price + buffer : trade.entry_price - buffer;
+    const improves = isBuy ? target > trade.stop_loss : target < trade.stop_loss;
+    // Only move up to break-even; once the trail is ahead of it, leave it be.
+    const notYetProtected = isBuy
       ? trade.stop_loss < trade.entry_price
       : trade.stop_loss > trade.entry_price;
-    if (stopIsWorseThanEntry) {
-      return { type: "move_stop", new_stop: +trade.entry_price.toFixed(2), reason: `Move to break-even at ${beAtR}R` };
+    if (improves && notYetProtected) {
+      return { type: "move_stop", new_stop: +target.toFixed(2), reason: `Move to break-even at ${beAtR}R` };
     }
   }
 
@@ -101,6 +144,7 @@ export function evaluate({
     const trailDistance = atr && atr > 0
       ? atr * (plan?.trail_atr_multiple ?? 1.5)
       : risk * trailFraction;
+
     const trailed = isBuy ? price - trailDistance : price + trailDistance;
     const improves = isBuy ? trailed > trade.stop_loss : trailed < trade.stop_loss;
     if (improves) {
