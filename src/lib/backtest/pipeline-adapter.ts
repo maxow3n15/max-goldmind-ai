@@ -198,6 +198,12 @@ export interface ReplayBarContext {
   cycleId: string;
   /** Point-in-time correlation, when real historical series are available. */
   correlation?: CorrelationReport | null;
+  /** Structured-confidence factor weights under test. */
+  confidenceWeights?: Record<string, number> | null;
+  /** Composite pillar weights under test. */
+  compositeWeights?: Record<string, number> | null;
+  /** Research-only confidence floor (calibration measurement runs). */
+  researchConfidenceFloor?: number | null;
 }
 
 /** Analysis object standing in for the AI response. */
@@ -278,7 +284,9 @@ export function buildOrchestratorInput(ctx: ReplayBarContext): OrchestratorInput
     cycleId: ctx.cycleId,
     mtf: ctx.mtf,
     entryStructure: ctx.structure,
-    confidenceWeights: null,
+    confidenceWeights: (ctx.confidenceWeights ?? null) as any,
+    compositeWeights: ctx.compositeWeights ?? null,
+    researchConfidenceFloor: ctx.researchConfidenceFloor ?? null,
     sessionSweep: sweep ? { side: sweep.side, reclaimed: sweep.reclaimed, t: sweep.t } : null,
     now,
   };
