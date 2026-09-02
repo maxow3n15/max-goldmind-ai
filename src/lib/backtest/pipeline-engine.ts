@@ -294,6 +294,14 @@ export function runPipelineBacktest(
   const models = new Map<string, number>();
   let candidateBars = 0;
   let approvedBars = 0;
+  // Data-fidelity diagnostics: how often the replay's own market view is
+  // degraded, and what that does to the HTF-alignment confidence factor.
+  const diag = {
+    candidateBars: 0,
+    mtfDegradedBars: 0,
+    availableTimeframeCounts: new Map<number, number>(),
+    htfVerdicts: new Map<string, number>(),
+  };
   let sequence = 0;
 
   const closeLeg = (leg: LiveLeg, exit: number, t: number, reason: SimTrade["exitReason"]) => {
