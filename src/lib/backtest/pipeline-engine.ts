@@ -136,6 +136,14 @@ export interface PipelineBacktestResult extends BacktestResult {
   modelStats: ModelStats[];
   caveats: string[];
   missingTimeframes: TimeframeKey[];
+  /** Temporary data-fidelity diagnostics for the calibration study. */
+  dataFidelity: {
+    candidateBars: number;
+    mtfDegradedBars: number;
+    mtfDegradedFraction: number;
+    availableTimeframeCounts: { available: number; bars: number }[];
+    htfAlignmentVerdicts: { verdict: string; count: number }[];
+  };
   /** Distribution of the deterministic confidence on candidate bars. */
   confidence: { samples: number; median: number; p90: number; max: number };
 }
@@ -556,5 +564,18 @@ export function runPipelineBacktest(
     models: [...models.entries()].map(([model, count]) => ({ model, trades: count })).sort((a, b) => b.trades - a.trades),
     caveats: cfg.caveats ?? FIDELITY_CAVEATS,
     missingTimeframes: series.missingTimeframes(),
+    dataFidelity: {
+      candidateBars: diag.candidateBars,
+      mtfDegradedBars: diag.mtfDegradedBars,
+      mtfDegradedFraction: diag.candidateBars
+        ? Number((diag.mtfDegradedBars / diag.candidateBars).toFixed(4))
+        : 0,
+      availableTimeframeCounts: [...diag.availableTimeframeCounts.entries()]
+        .map(([available, bars]) => ({ available, bars }))
+        .sort((a, b) => a.available - b.available),
+      htfAlignmentVerdicts: [...diag.htfVerdicts.entries()]
+        .map(([verdict, count]) => ({ verdict, count }))
+        .sort((a, b) => b.count - a.count),
+    },
   };
 }
