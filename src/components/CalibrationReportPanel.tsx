@@ -183,6 +183,36 @@ export function CalibrationReportPanel() {
             )}
           </div>
 
+          {report.dataFidelity && (
+            <div className="rounded-md border border-border/60 p-3">
+              <div className="text-xs font-medium mb-2">Replay data fidelity</div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <Cell
+                  label="Bars with degraded MTF"
+                  value={`${Math.round(report.dataFidelity.mtfDegradedFraction * 100)}%`}
+                />
+                <Cell
+                  label="HTF alignment scored"
+                  value={report.dataFidelity.htfAlignmentVerdicts
+                    .map((v: any) => `${v.verdict} ${v.count}`)
+                    .join(" · ") || "—"}
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-muted-foreground space-y-0.5">
+                <div>
+                  Sub-execution history loaded:{" "}
+                  {report.dataFidelity.finerSeriesLoaded.join(", ") || "none"}
+                </div>
+                {report.dataFidelity.finerSeriesMissing.length > 0 && (
+                  <div>
+                    Unavailable: {report.dataFidelity.finerSeriesMissing.join(", ")} — the
+                    higher-timeframe alignment factor is weakened on affected bars.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div>
             <div className="text-xs font-medium mb-2">What blocked trades</div>
             <div className="space-y-1">
