@@ -71,15 +71,35 @@ export class PointInTimeSeries {
   private readonly baseTf: TimeframeKey;
   private readonly maxBars: number;
   private readonly series = new Map<TimeframeKey, Candle[]>();
+  /** Independently sourced sub-execution series, replayed by cursor. */
+  private readonly finer = new Map<TimeframeKey, { src: Candle[]; next: number }>();
   private cursor = -1;
 
-  constructor(base: Candle[], baseTf: TimeframeKey, maxBars = DEFAULT_WINDOW_BARS) {
+  /**
+   * `finer` supplies real historical candles for timeframes *below* the
+   * execution resolution — these cannot be reconstructed by aggregation, so
+   * without them the MTF report is permanently degraded. They are consumed
+   * strictly by cursor: only candles with `t <= bar.t` are ever visible.
+   */
+  constructor(
+    base: Candle[],
+    baseTf: TimeframeKey,
+    maxBars = DEFAULT_WINDOW_BARS,
+    finer?: Partial<Record<TimeframeKey, Candle[]>>,
+  ) {
     this.base = base;
     this.baseTf = baseTf;
     this.maxBars = maxBars;
     const baseMinutes = TIMEFRAME_MINUTES[baseTf];
     for (const tf of ALL_TIMEFRAMES) {
       if (TIMEFRAME_MINUTES[tf] >= baseMinutes) this.series.set(tf, []);
+    }
+    for (const tf of ALL_TIMEFRAMES) {
+      if (TIMEFRAME_MINUTES[tf] >= baseMinutes) continue;
+      const src = finer?.[tf];
+      if (!src || !src.length) continue;
+      this.finer.set(tf, { src: [...src].sort((a, b) => a.t - b.t), next: 0 });
+      this.series.set(tf, []);
     }
   }
 
@@ -113,7 +133,18 @@ export class PointInTimeSeries {
         if (series.length > this.maxBars) series.shift();
         continue;
       }
+      if (this.finer.has(tf)) continue;
       pushBar(series, bar, TIMEFRAME_MINUTES[tf], this.maxBars);
+    }
+    // Sub-execution series advance by cursor: every candle stamped at or
+    // before the current bar becomes visible, nothing after it ever does.
+    for (const [tf, state] of this.finer) {
+      const series = this.series.get(tf)!;
+      while (state.next < state.src.length && state.src[state.next].t <= bar.t) {
+        series.push({ ...state.src[state.next] });
+        if (series.length > this.maxBars) series.shift();
+        state.next += 1;
+      }
     }
     return bar;
   }

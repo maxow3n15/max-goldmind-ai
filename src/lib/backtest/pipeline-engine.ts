@@ -49,6 +49,11 @@ export interface PipelineBacktestConfig {
   spread: number;
   /** Optional per-bar spread series (broker bid/ask), index-aligned with candles. */
   spreads?: number[];
+  /**
+   * Independently fetched historical series for timeframes finer than the
+   * execution resolution. Without these the MTF report is always degraded.
+   */
+  finerSeries?: Partial<Record<TimeframeKey, Candle[]>>;
   /** Optional point-in-time correlation built from real historical series. */
   correlation?: ReplayCorrelation | null;
   /** Extra fidelity notes describing the data source actually used. */
@@ -136,6 +141,14 @@ export interface PipelineBacktestResult extends BacktestResult {
   modelStats: ModelStats[];
   caveats: string[];
   missingTimeframes: TimeframeKey[];
+  /** Temporary data-fidelity diagnostics for the calibration study. */
+  dataFidelity: {
+    candidateBars: number;
+    mtfDegradedBars: number;
+    mtfDegradedFraction: number;
+    availableTimeframeCounts: { available: number; bars: number }[];
+    htfAlignmentVerdicts: { verdict: string; count: number }[];
+  };
   /** Distribution of the deterministic confidence on candidate bars. */
   confidence: { samples: number; median: number; p90: number; max: number };
 }
@@ -259,7 +272,7 @@ export function runPipelineBacktest(
 ): PipelineBacktestResult {
   const cfg = config;
   const settings = buildReplaySettings(cfg.settings);
-  const series = new PointInTimeSeries(candles, cfg.timeframe);
+  const series = new PointInTimeSeries(candles, cfg.timeframe, undefined, cfg.finerSeries);
   // Exit parameters under test are expressed through the same management
   // recommendation object the live volatility engine produces.
   const managementPlan =
@@ -294,6 +307,14 @@ export function runPipelineBacktest(
   const models = new Map<string, number>();
   let candidateBars = 0;
   let approvedBars = 0;
+  // Data-fidelity diagnostics: how often the replay's own market view is
+  // degraded, and what that does to the HTF-alignment confidence factor.
+  const diag = {
+    candidateBars: 0,
+    mtfDegradedBars: 0,
+    availableTimeframeCounts: new Map<number, number>(),
+    htfVerdicts: new Map<string, number>(),
+  };
   let sequence = 0;
 
   const closeLeg = (leg: LiveLeg, exit: number, t: number, reason: SimTrade["exitReason"]) => {
@@ -445,6 +466,14 @@ export function runPipelineBacktest(
     if (proposal) {
       const c = decision.composite?.final ?? decision.structured?.score ?? null;
       if (typeof c === "number" && Number.isFinite(c)) confidenceSamples.push(c);
+
+      diag.candidateBars += 1;
+      if (mtf.degraded) diag.mtfDegradedBars += 1;
+      const avail = mtf.timeframes.filter((t) => t.bars >= 12).length;
+      diag.availableTimeframeCounts.set(avail, (diag.availableTimeframeCounts.get(avail) ?? 0) + 1);
+      const htf = decision.structured?.factors?.find((f) => f.key === "htf_alignment");
+      const v = htf?.verdict ?? "missing";
+      diag.htfVerdicts.set(v, (diag.htfVerdicts.get(v) ?? 0) + 1);
     }
 
     if (decision.action !== "open" || decision.plans.length === 0) {
@@ -540,5 +569,18 @@ export function runPipelineBacktest(
     models: [...models.entries()].map(([model, count]) => ({ model, trades: count })).sort((a, b) => b.trades - a.trades),
     caveats: cfg.caveats ?? FIDELITY_CAVEATS,
     missingTimeframes: series.missingTimeframes(),
+    dataFidelity: {
+      candidateBars: diag.candidateBars,
+      mtfDegradedBars: diag.mtfDegradedBars,
+      mtfDegradedFraction: diag.candidateBars
+        ? Number((diag.mtfDegradedBars / diag.candidateBars).toFixed(4))
+        : 0,
+      availableTimeframeCounts: [...diag.availableTimeframeCounts.entries()]
+        .map(([available, bars]) => ({ available, bars }))
+        .sort((a, b) => a.available - b.available),
+      htfAlignmentVerdicts: [...diag.htfVerdicts.entries()]
+        .map(([verdict, count]) => ({ verdict, count }))
+        .sort((a, b) => b.count - a.count),
+    },
   };
 }
