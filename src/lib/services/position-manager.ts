@@ -119,13 +119,22 @@ export function evaluate({
     }
   }
 
-  // 4. Move to break-even once the trade has earned it.
+  // Steps 4 and 5 are the only R-based branches. Without a usable initial risk
+  // they are skipped, but the exit checks above have already run.
+  if (risk <= 0) return { type: "none" };
+
+  // 4. Move to break-even once the trade has earned it. The stop is placed a
+  // small buffer BEYOND entry, never exactly at it.
   if (rMultiple >= beAtR) {
-    const stopIsWorseThanEntry = isBuy
+    const buffer = risk * Math.max(0, breakEvenBuffer);
+    const target = isBuy ? trade.entry_price + buffer : trade.entry_price - buffer;
+    const improves = isBuy ? target > trade.stop_loss : target < trade.stop_loss;
+    // Only move up to break-even; once the trail is ahead of it, leave it be.
+    const notYetProtected = isBuy
       ? trade.stop_loss < trade.entry_price
       : trade.stop_loss > trade.entry_price;
-    if (stopIsWorseThanEntry) {
-      return { type: "move_stop", new_stop: +trade.entry_price.toFixed(2), reason: `Move to break-even at ${beAtR}R` };
+    if (improves && notYetProtected) {
+      return { type: "move_stop", new_stop: +target.toFixed(2), reason: `Move to break-even at ${beAtR}R` };
     }
   }
 
@@ -135,6 +144,7 @@ export function evaluate({
     const trailDistance = atr && atr > 0
       ? atr * (plan?.trail_atr_multiple ?? 1.5)
       : risk * trailFraction;
+
     const trailed = isBuy ? price - trailDistance : price + trailDistance;
     const improves = isBuy ? trailed > trade.stop_loss : trailed < trade.stop_loss;
     if (improves) {
