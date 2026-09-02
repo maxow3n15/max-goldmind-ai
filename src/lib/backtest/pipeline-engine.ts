@@ -453,6 +453,14 @@ export function runPipelineBacktest(
     if (proposal) {
       const c = decision.composite?.final ?? decision.structured?.score ?? null;
       if (typeof c === "number" && Number.isFinite(c)) confidenceSamples.push(c);
+
+      diag.candidateBars += 1;
+      if (mtf.degraded) diag.mtfDegradedBars += 1;
+      const avail = mtf.timeframes.filter((t) => t.bars >= 12).length;
+      diag.availableTimeframeCounts.set(avail, (diag.availableTimeframeCounts.get(avail) ?? 0) + 1);
+      const htf = decision.structured?.factors?.find((f) => f.key === "htf_alignment");
+      const v = htf?.verdict ?? "missing";
+      diag.htfVerdicts.set(v, (diag.htfVerdicts.get(v) ?? 0) + 1);
     }
 
     if (decision.action !== "open" || decision.plans.length === 0) {
