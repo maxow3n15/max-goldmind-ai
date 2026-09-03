@@ -22,16 +22,13 @@ export const Route = createFileRoute("/api/public/cron/tick")({
       GET: async () => json({ ok: true, service: "GoldMind AI autopilot tick" }),
 
       POST: async ({ request }) => {
-        const secret = process.env["CRON_SECRET"];
-        if (!secret) return json({ error: "not configured" }, 503);
-        const provided = request.headers.get("x-cron-secret") ?? "";
-        // Timing-safe: compare digests so neither length nor content leaks.
-        const { createHash, timingSafeEqual } = await import("crypto");
-        const a = createHash("sha256").update(provided).digest();
-        const b = createHash("sha256").update(secret).digest();
-        if (!timingSafeEqual(a, b)) {
-          return json({ error: "unauthorised" }, 401);
-        }
+        // The shared secret lives in managed storage, never in the repository
+        // and never in the scheduled job's command text.
+        const { verifyCronRequest } = await import("@/lib/cron-auth.server");
+        const auth = await verifyCronRequest(request);
+        if (!auth.ok) return json({ error: auth.error }, auth.status);
+
+
 
 
         const { runScheduledTick } = await import("@/lib/services/tick.server");
