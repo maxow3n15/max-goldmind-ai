@@ -862,6 +862,7 @@ export type Database = {
         Args: { _holder: string; _key: string; _ttl_seconds: number }
         Returns: boolean
       }
+      verify_cron_secret: { Args: { _provided: string }; Returns: boolean }
     }
     Enums: {
       [_ in never]: never
