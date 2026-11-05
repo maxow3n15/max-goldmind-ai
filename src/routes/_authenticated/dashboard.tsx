@@ -287,7 +287,17 @@ function Dashboard() {
 
       {/* Open trades */}
       <div className="glass-panel rounded-2xl p-5">
-        <h2 className="font-display text-lg font-semibold mb-3">Open positions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-semibold">Open positions</h2>
+          {openTrades.length > 0 && (
+            <button
+              onClick={() => setConfirmCloseAll(true)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium bg-[color:var(--destructive)]/15 text-[color:var(--destructive)] hover:bg-[color:var(--destructive)]/25 transition-colors"
+            >
+              Close all
+            </button>
+          )}
+        </div>
         {openTrades.length === 0 ? (
           <div className="text-sm text-muted-foreground py-6 text-center">No open positions.</div>
         ) : (
@@ -327,6 +337,36 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={confirmCloseAll} onOpenChange={setConfirmCloseAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close all open positions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will close {openTrades.length} open trade{openTrades.length === 1 ? "" : "s"} at the current market price.
+              {combinedPnl != null && (
+                <>
+                  {" "}Combined live P&L:{" "}
+                  <span className={`font-mono font-semibold ${combinedPnl >= 0 ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                    {fmtUsd(combinedPnl)}
+                  </span>
+                  .
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={closeAll.isPending}>Keep positions</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); closeAll.mutate(); }}
+              disabled={closeAll.isPending}
+              className="bg-[color:var(--destructive)] text-[color:var(--destructive-foreground)] hover:opacity-90"
+            >
+              {closeAll.isPending ? "Closing…" : "Close all"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
