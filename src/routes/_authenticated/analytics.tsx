@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
+import {
+  ResponsiveContainer,
+  ScatterChart,
+  Scatter,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceLine,
+  CartesianGrid,
+} from "recharts";
 import { listTrades, getAccountSnapshot } from "@/lib/trades.functions";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
@@ -93,7 +103,100 @@ function Analytics() {
         )}
       </div>
 
+      <HoldingTimeChart closed={closed} />
+
       <ForensicsPanels />
+    </div>
+  );
+}
+
+interface HoldingPoint {
+  durationMin: number;
+  r: number;
+  pnl: number;
+  setup: string;
+  session: string;
+  win: boolean;
+}
+
+function HoldingTimeChart({ closed }: { closed: any[] }) {
+  const points: HoldingPoint[] = closed
+    .map((t: any) => {
+      const opened = t.opened_at ? new Date(t.opened_at).getTime() : null;
+      const closedAt = t.closed_at ? new Date(t.closed_at).getTime() : null;
+      const entry = Number(t.entry_price);
+      const exit = Number(t.exit_price);
+      const sl = Number(t.stop_loss);
+      const risk = Math.abs(entry - sl);
+      if (opened == null || closedAt == null || !risk || !Number.isFinite(exit)) return null;
+      const r = (t.direction === "BUY" ? exit - entry : entry - exit) / risk;
+      const pnl = Number(t.pnl);
+      return {
+        durationMin: Math.round(((closedAt - opened) / 60000) * 10) / 10,
+        r: Math.round(r * 100) / 100,
+        pnl,
+        setup: t.ai_analysis?.setup_model?.type?.replaceAll("_", " ").toLowerCase() ?? t.ai_analysis?.bias ?? t.reason_entry?.slice(0, 40) ?? "—",
+        session: t.session ?? "Unknown",
+        win: pnl > 0,
+      } as HoldingPoint;
+    })
+    .filter((p): p is HoldingPoint => p !== null);
+
+  const winners = points.filter((p) => p.win);
+  const losers = points.filter((p) => !p.win);
+
+  return (
+    <div className="glass-panel rounded-2xl p-5">
+      <h2 className="font-display text-lg font-semibold mb-1">Holding time vs result</h2>
+      <p className="text-xs text-muted-foreground mb-4">
+        Each dot is a closed trade — how long it was held versus the R-multiple it returned.
+      </p>
+      {points.length < 5 ? (
+        <p className="text-sm text-muted-foreground py-8 text-center">Not enough data yet.</p>
+      ) : (
+        <div className="h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+              <CartesianGrid stroke="var(--border)" strokeOpacity={0.4} />
+              <XAxis
+                type="number"
+                dataKey="durationMin"
+                name="Duration"
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                stroke="var(--border)"
+                tickFormatter={(v) => (v >= 60 ? `${Math.round(v / 60)}h` : `${v}m`)}
+              />
+              <YAxis
+                type="number"
+                dataKey="r"
+                name="R-multiple"
+                tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                stroke="var(--border)"
+                tickFormatter={(v) => `${v}R`}
+              />
+              <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" strokeOpacity={0.7} />
+              <Tooltip
+                cursor={{ strokeDasharray: "3 3", stroke: "var(--muted-foreground)" }}
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const p = payload[0].payload as HoldingPoint;
+                  return (
+                    <div className="rounded-lg border border-border bg-background/95 px-3 py-2 text-xs shadow-lg">
+                      <div className="font-medium capitalize">{p.setup}</div>
+                      <div className="text-muted-foreground">{p.session} session · {p.durationMin >= 60 ? `${(p.durationMin / 60).toFixed(1)}h` : `${p.durationMin}m`} held</div>
+                      <div className={`font-mono mt-1 ${p.win ? "text-[color:var(--gold)]" : "text-[color:var(--destructive)]"}`}>
+                        {p.r >= 0 ? "+" : ""}{p.r}R · {fmtUsd(p.pnl)}
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+              <Scatter name="Winners" data={winners} fill="var(--gold)" />
+              <Scatter name="Losers" data={losers} fill="var(--destructive)" />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </div>
   );
 }
