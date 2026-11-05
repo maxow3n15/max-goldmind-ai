@@ -256,10 +256,52 @@ export const listTrades = createServerFn({ method: "GET" })
 export const getAccountSnapshot = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const [{ data: acct }, { data: trades }] = await Promise.all([
+    const [{ data: acct }, { data: trades }, { data: settings }, { data: conn }] = await Promise.all([
       context.supabase.from("paper_account").select("*").eq("user_id", context.userId).maybeSingle(),
       context.supabase.from("trades").select("pnl, status, opened_at, closed_at").eq("user_id", context.userId),
+      context.supabase.from("user_settings").select("trading_mode").eq("user_id", context.userId).maybeSingle(),
+      context.supabase.from("broker_connections").select("broker_id, label, balance, equity, free_margin, currency, account_type").eq("user_id", context.userId).eq("is_default", true).maybeSingle(),
     ]);
+
+    // One authoritative balance. In live/broker mode the autopilot sizes and
+    // trades from the BROKER account, so the dashboard must show that same
+    // account — never the internal paper account. The paper account is
+    // mirror-synced to the broker balance so the two can never drift apart
+    // and switching back to paper mode starts from the same number.
+    let account: Record<string, unknown> = {
+      ...(acct ?? { balance: 10000, equity: 10000, free_margin: 10000, margin_used: 0 }),
+      currency: "USD",
+      source: "paper_account",
+    };
+    if (settings?.trading_mode === "live" && conn?.balance != null) {
+      const balance = Number(conn.balance);
+      const equity = conn.equity != null ? Number(conn.equity) : balance;
+      const freeMargin = conn.free_margin != null ? Number(conn.free_margin) : equity;
+      account = {
+        balance,
+        equity,
+        free_margin: freeMargin,
+        margin_used: Math.max(0, equity - freeMargin),
+        currency: conn.currency ?? "USD",
+        source: `broker:${conn.broker_id}`,
+        broker_label: conn.label ?? conn.broker_id,
+        account_type: conn.account_type,
+      };
+      const drift =
+        !acct ||
+        Math.abs(Number(acct.balance) - balance) > 0.01 ||
+        Math.abs(Number(acct.equity) - equity) > 0.01;
+      if (drift) {
+        await context.supabase.from("paper_account").upsert({
+          user_id: context.userId,
+          balance,
+          equity,
+          free_margin: freeMargin,
+          margin_used: Math.max(0, equity - freeMargin),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    }
     const closed = (trades ?? []).filter((t) => t.status === "closed" && t.pnl != null);
     const open = (trades ?? []).filter((t) => t.status === "open");
     const now = new Date();
