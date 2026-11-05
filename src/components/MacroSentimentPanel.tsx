@@ -183,6 +183,24 @@ export function MacroSentimentPanel({
 
         <div className="glass-panel rounded-2xl p-5">
           <h3 className="font-display text-base font-semibold">Breaking headlines</h3>
+          {(() => {
+            const headlines = macro?.headlines ?? [];
+            const tally = { bullish: 0, bearish: 0, neutral: 0 };
+            for (const h of headlines) {
+              if (h.gold_effect === "bullish") tally.bullish += 1;
+              else if (h.gold_effect === "bearish") tally.bearish += 1;
+              else tally.neutral += 1;
+            }
+            return headlines.length > 0 ? (
+              <p className="mt-1 text-xs font-mono">
+                <span className="text-[color:var(--gold)]">{tally.bullish} bullish</span>
+                <span className="text-muted-foreground/60"> · </span>
+                <span className="text-rose-400">{tally.bearish} bearish</span>
+                <span className="text-muted-foreground/60"> · </span>
+                <span className="text-muted-foreground">{tally.neutral} neutral</span>
+              </p>
+            ) : null;
+          })()}
           <ul className="mt-3 space-y-3">
             {(macro?.headlines ?? []).length === 0 && (
               <li className="text-xs text-muted-foreground">No scored headlines yet.</li>
@@ -194,12 +212,18 @@ export function MacroSentimentPanel({
                     h.gold_effect === "bullish" ? "text-emerald-400" : h.gold_effect === "bearish" ? "text-rose-400" : "text-muted-foreground")}>
                     {h.gold_effect === "bullish" ? "▲" : h.gold_effect === "bearish" ? "▼" : "•"}
                   </span>
-                  <div>
+                  <div className="flex-1 min-w-0">
                     {h.url ? (
                       <a href={h.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">{h.title}</a>
                     ) : <p className="font-medium">{h.title}</p>}
                     <p className="text-muted-foreground">{h.source} · {h.impact} impact — {h.reason}</p>
                   </div>
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider",
+                    h.gold_effect === "bullish" ? "bg-[color:var(--gold)]/15 text-[color:var(--gold)]"
+                      : h.gold_effect === "bearish" ? "bg-rose-500/15 text-rose-400"
+                      : "bg-muted/40 text-muted-foreground")}>
+                    {h.gold_effect === "bullish" ? "Bullish" : h.gold_effect === "bearish" ? "Bearish" : "Neutral"}
+                  </span>
                 </div>
               </li>
             ))}
