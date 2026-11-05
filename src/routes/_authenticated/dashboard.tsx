@@ -254,7 +254,7 @@ function Dashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-[10px] uppercase tracking-widest text-muted-foreground text-left">
-                <tr><th className="py-2">Dir</th><th>Entry</th><th>SL</th><th>TP1</th><th>Size</th><th>Conf</th><th>Session</th><th></th></tr>
+                <tr><th className="py-2">Dir</th><th>Entry</th><th>SL</th><th>TP1</th><th className="w-40">Progress</th><th>Size</th><th>Conf</th><th>Session</th><th></th></tr>
               </thead>
               <tbody>
                 {openTrades.map((t: any) => (
@@ -263,6 +263,15 @@ function Dashboard() {
                     <td>{fmtNum(t.entry_price, 2)}</td>
                     <td className="text-[color:var(--destructive)]">{fmtNum(t.stop_loss, 2)}</td>
                     <td className="text-[color:var(--success)]">{fmtNum(t.take_profit_1, 2)}</td>
+                    <td className="py-2.5 pr-3">
+                      <TradeProgressBar
+                        direction={t.direction}
+                        entry={Number(t.entry_price)}
+                        stopLoss={Number(t.stop_loss)}
+                        takeProfit={t.take_profit_1 != null ? Number(t.take_profit_1) : null}
+                        price={market.quote?.mid ?? null}
+                      />
+                    </td>
                     <td>{fmtNum(t.lot_size, 2)}</td>
                     <td>{Math.round(t.confidence ?? 0)}%</td>
                     <td className="font-sans">{t.session ?? "—"}</td>
