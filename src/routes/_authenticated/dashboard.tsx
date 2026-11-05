@@ -126,7 +126,8 @@ function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs gold-border text-[color:var(--gold)]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--gold)] ticker-pulse" /> Paper mode
+            <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--gold)] ticker-pulse" />
+            {String(snapshot.data?.account?.source ?? "").startsWith("broker:") ? "Broker mode" : "Paper mode"}
           </span>
         </div>
       </header>
@@ -134,9 +135,12 @@ function Dashboard() {
       {/* Top stat strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
         <StatCard label="Balance" tone="gold" icon={<Wallet className="h-3.5 w-3.5" />}
-          value={fmtUsd(Number(snapshot.data?.account?.balance ?? 0))} />
-        <StatCard label="Equity" value={fmtUsd(Number(snapshot.data?.account?.equity ?? 0))} />
-        <StatCard label="Free margin" value={fmtUsd(Number(snapshot.data?.account?.free_margin ?? 0))} />
+          hint={String(snapshot.data?.account?.source ?? "").startsWith("broker:")
+            ? `${(snapshot.data?.account as any)?.broker_label ?? "Broker"} · ${(snapshot.data?.account as any)?.account_type ?? ""}`
+            : "Internal paper account"}
+          value={fmtMoney(Number(snapshot.data?.account?.balance ?? 0), String(snapshot.data?.account?.currency ?? "USD"))} />
+        <StatCard label="Equity" value={fmtMoney(Number(snapshot.data?.account?.equity ?? 0), String(snapshot.data?.account?.currency ?? "USD"))} />
+        <StatCard label="Free margin" value={fmtMoney(Number(snapshot.data?.account?.free_margin ?? 0), String(snapshot.data?.account?.currency ?? "USD"))} />
         <StatCard label="Daily P&L" tone={(snapshot.data?.daily_pnl ?? 0) >= 0 ? "success" : "danger"}
           value={fmtUsd(snapshot.data?.daily_pnl ?? 0)} />
         <StatCard label="Weekly P&L" tone={(snapshot.data?.weekly_pnl ?? 0) >= 0 ? "success" : "danger"}
