@@ -9,8 +9,19 @@ import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
 import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
+import { flattenAllPositions } from "@/lib/live-control.functions";
 import { currentSession, fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Activity, Brain, Clock, TrendingUp, TrendingDown, Wallet, Layers, Target, X, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -113,6 +124,35 @@ function Dashboard() {
 
   const setup = analyze.data;
   const openTrades = (trades.data ?? []).filter((t: any) => t.status === "open");
+
+  // Combined live P&L of all open positions at the current mid price.
+  const livePrice = market.quote?.mid ?? null;
+  const combinedPnl = livePrice == null
+    ? null
+    : openTrades.reduce((sum: number, t: any) => {
+        const diff = t.direction === "BUY" ? livePrice - Number(t.entry_price) : Number(t.entry_price) - livePrice;
+        return sum + diff * 100 * Number(t.lot_size);
+      }, 0);
+
+  const [confirmCloseAll, setConfirmCloseAll] = useState(false);
+  const flattenFn = useSFn(flattenAllPositions);
+  const closeAll = useMutation({
+    mutationFn: () => flattenFn({ data: { confirm: true } }),
+    onSuccess: (d: any) => {
+      setConfirmCloseAll(false);
+      if (d?.failed > 0) {
+        toast.warning(`Closed ${d.closed} of ${d.closed + d.failed} — ${d.failed} need reconciliation`);
+      } else {
+        toast.success(`Closed all ${d?.closed ?? 0} position${(d?.closed ?? 0) === 1 ? "" : "s"}`);
+      }
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["snapshot"] });
+    },
+    onError: (e: any) => {
+      setConfirmCloseAll(false);
+      toast.error(e?.message ?? "Close all failed");
+    },
+  });
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
@@ -247,7 +287,17 @@ function Dashboard() {
 
       {/* Open trades */}
       <div className="glass-panel rounded-2xl p-5">
-        <h2 className="font-display text-lg font-semibold mb-3">Open positions</h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="font-display text-lg font-semibold">Open positions</h2>
+          {openTrades.length > 0 && (
+            <button
+              onClick={() => setConfirmCloseAll(true)}
+              className="rounded-md px-3 py-1.5 text-xs font-medium bg-[color:var(--destructive)]/15 text-[color:var(--destructive)] hover:bg-[color:var(--destructive)]/25 transition-colors"
+            >
+              Close all
+            </button>
+          )}
+        </div>
         {openTrades.length === 0 ? (
           <div className="text-sm text-muted-foreground py-6 text-center">No open positions.</div>
         ) : (
@@ -287,6 +337,36 @@ function Dashboard() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={confirmCloseAll} onOpenChange={setConfirmCloseAll}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close all open positions?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will close {openTrades.length} open trade{openTrades.length === 1 ? "" : "s"} at the current market price.
+              {combinedPnl != null && (
+                <>
+                  {" "}Combined live P&L:{" "}
+                  <span className={`font-mono font-semibold ${combinedPnl >= 0 ? "text-[color:var(--success)]" : "text-[color:var(--destructive)]"}`}>
+                    {fmtUsd(combinedPnl)}
+                  </span>
+                  .
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={closeAll.isPending}>Keep positions</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => { e.preventDefault(); closeAll.mutate(); }}
+              disabled={closeAll.isPending}
+              className="bg-[color:var(--destructive)] text-[color:var(--destructive-foreground)] hover:opacity-90"
+            >
+              {closeAll.isPending ? "Closing…" : "Close all"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
