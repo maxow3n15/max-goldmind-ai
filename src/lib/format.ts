@@ -1,6 +1,11 @@
 export const fmtUsd = (n: number | null | undefined, digits = 2) =>
   n == null || Number.isNaN(n) ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
 
+export const fmtMoney = (n: number | null | undefined, currency = "USD", digits = 2) =>
+  n == null || Number.isNaN(n)
+    ? "—"
+    : new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
+
 export const fmtNum = (n: number | null | undefined, digits = 2) =>
   n == null || Number.isNaN(n) ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
