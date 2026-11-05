@@ -291,6 +291,62 @@ function Dashboard() {
   );
 }
 
+/**
+ * Slim SL→TP1 progress bar for an open trade. Left end = stop loss, right end
+ * = TP1. The fill runs from the entry to the current price: gold when price
+ * is on the take-profit side of entry, red when it is on the stop-loss side.
+ * The gold dot marks the live price; the label is the live R-multiple.
+ */
+function TradeProgressBar({
+  direction,
+  entry,
+  stopLoss,
+  takeProfit,
+  price,
+}: {
+  direction: string;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number | null;
+  price: number | null;
+}) {
+  if (takeProfit == null || price == null || !Number.isFinite(entry) || !Number.isFinite(stopLoss) || takeProfit === stopLoss) {
+    return <span className="text-muted-foreground text-xs">—</span>;
+  }
+  const span = takeProfit - stopLoss;
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+  const pos = clamp01((price - stopLoss) / span);
+  const entryPos = clamp01((entry - stopLoss) / span);
+  const risk = Math.abs(entry - stopLoss);
+  const r = risk > 0
+    ? (direction === "BUY" ? price - entry : entry - price) / risk
+    : 0;
+  const winning = r >= 0;
+  const fillLeft = Math.min(pos, entryPos) * 100;
+  const fillWidth = Math.abs(pos - entryPos) * 100;
+
+  return (
+    <div className="flex items-center gap-2 min-w-36">
+      <div className="relative h-1.5 flex-1 rounded-full bg-secondary/60" title={`SL ${fmtNum(stopLoss, 2)} → TP1 ${fmtNum(takeProfit, 2)}`}>
+        <div
+          className={`absolute top-0 h-full rounded-full ${winning ? "bg-[color:var(--gold)]" : "bg-[color:var(--destructive)]"}`}
+          style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }}
+        />
+        {/* entry tick */}
+        <div className="absolute top-[-2px] h-[10px] w-px bg-muted-foreground/70" style={{ left: `${entryPos * 100}%` }} />
+        {/* live price marker */}
+        <div
+          className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color:var(--gold)] ring-2 ring-background"
+          style={{ left: `${pos * 100}%` }}
+        />
+      </div>
+      <span className={`font-mono text-xs tabular-nums w-14 text-right ${winning ? "text-[color:var(--gold)]" : "text-[color:var(--destructive)]"}`}>
+        {r >= 0 ? "+" : ""}{r.toFixed(2)}R
+      </span>
+    </div>
+  );
+}
+
 function Row({ label, v, tone }: { label: string; v: any; tone?: "success" | "danger" }) {
   return (
     <div className="flex items-center justify-between p-2 rounded-md bg-secondary/40">
