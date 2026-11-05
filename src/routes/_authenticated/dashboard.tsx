@@ -8,7 +8,7 @@ import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
-import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
+import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade, moveStopToBreakeven } from "@/lib/trades.functions";
 import { flattenAllPositions } from "@/lib/live-control.functions";
 import { currentSession, fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { toast } from "sonner";
@@ -120,6 +120,16 @@ function Dashboard() {
       qc.invalidateQueries({ queryKey: ["snapshot"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Close failed"),
+  });
+
+  const breakevenFn = useSFn(moveStopToBreakeven);
+  const moveToBE = useMutation({
+    mutationFn: (id: string) => breakevenFn({ data: { id } }),
+    onSuccess: (d: any) => {
+      toast.success(d?.already ? "Stop already at break-even" : "Stop moved to break-even");
+      qc.invalidateQueries({ queryKey: ["trades"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not move stop"),
   });
 
   const setup = analyze.data;
@@ -326,9 +336,23 @@ function Dashboard() {
                     <td>{Math.round(t.confidence ?? 0)}%</td>
                     <td className="font-sans">{t.session ?? "—"}</td>
                     <td className="text-right">
-                      <button onClick={() => closeTrade.mutate(t.id)} className="p-1.5 rounded-md hover:bg-accent text-muted-foreground" title="Close">
-                        <X className="h-3.5 w-3.5" />
-                      </button>
+                      <span className="inline-flex items-center gap-1">
+                        {livePrice != null &&
+                          Math.abs(Number(t.stop_loss) - Number(t.entry_price)) > 1e-9 &&
+                          (t.direction === "BUY" ? livePrice > Number(t.entry_price) : livePrice < Number(t.entry_price)) && (
+                          <button
+                            onClick={() => moveToBE.mutate(t.id)}
+                            disabled={moveToBE.isPending}
+                            className="rounded px-1.5 py-0.5 text-[10px] font-semibold bg-[color:var(--gold)]/15 text-[color:var(--gold)] hover:bg-[color:var(--gold)]/25 disabled:opacity-50"
+                            title="Move stop loss to entry (break-even)"
+                          >
+                            BE
+                          </button>
+                        )}
+                        <button onClick={() => closeTrade.mutate(t.id)} className="p-1.5 rounded-md hover:bg-accent text-muted-foreground" title="Close">
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
                     </td>
                   </tr>
                 ))}
