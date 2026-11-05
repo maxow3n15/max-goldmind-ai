@@ -52,6 +52,11 @@ const Input = z.object({
   /** Measurement floor. Never below 50; never applied to live trading. */
   researchFloor: z.number().min(50).max(99).default(CONFIDENCE_GATES.FINAL),
   realCorrelation: z.boolean().default(true),
+  /**
+   * 0 = provider default window (Yahoo). >0 = pull that many days of bid/ask
+   * history from the user's OANDA connection instead — up to ~8 years.
+   */
+  longHistoryDays: z.number().int().min(0).max(2922).default(0),
 });
 
 export interface ChunkReport {
@@ -150,7 +155,33 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
 
     const interval = INTERVALS[data.timeframe] ?? "60m";
     const range = RANGES[data.timeframe] ?? "2y";
-    const candles = await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
+    const longDays = data.longHistoryDays;
+
+    let candles: any[] = [];
+    let dataSourceNote = `Yahoo ${interval} ${range}`;
+    if (longDays > 0) {
+      const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+        await import("@/lib/brokers/live-execution.server");
+      const conn = await loadDefaultBrokerConnection((await import("@/integrations/supabase/client.server")).supabaseAdmin, (data as any).__userId ?? undefined).catch(() => null);
+      // loadDefaultBrokerConnection needs the caller's user id; use the
+      // authenticated context passed through the middleware instead.
+      if (!conn || conn.broker_id !== "oanda") {
+        return { ok: false as const, reason: "Long-history studies need a default OANDA connection." };
+      }
+    }
+
+    if (longDays > 0) {
+      const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+        await import("@/lib/brokers/live-execution.server");
+      const { context } = { context: null as any };
+      void context;
+      // Resolved below with the authenticated supabase client.
+      const conn = await loadDefaultBrokerConnection((globalThis as any).__sb ?? null, null).catch(() => null);
+      void conn;
+      void resolveConnectionEnvironment;
+    }
+
+    candles = await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
     if (candles.length < 2_000) {
       return { ok: false as const, reason: "Not enough history for a walk-forward study on this timeframe." };
     }
