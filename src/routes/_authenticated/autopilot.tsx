@@ -194,6 +194,15 @@ function Autopilot() {
                 {setup.direction === "BUY" ? <TrendingUp className="h-3 w-3 inline mr-1" /> : <TrendingDown className="h-3 w-3 inline mr-1" />}
                 {setup.direction} · R:R {fmtNum(setup.risk_reward, 2)}
               </div>
+              <PriceLadder
+                direction={setup.direction}
+                entry={Number(setup.entry)}
+                stopLoss={Number(setup.stop_loss)}
+                takeProfits={[setup.take_profit_1, setup.take_profit_2, setup.take_profit_3]
+                  .filter((v): v is number => v != null && Number.isFinite(Number(v)))
+                  .map(Number)}
+                price={a.market.quote?.mid ?? null}
+              />
               <div className="grid grid-cols-2 gap-1 font-mono">
                 <Kv k="Entry" v={fmtNum(setup.entry, 2)} />
                 <Kv k="Stop" v={fmtNum(setup.stop_loss, 2)} tone="danger" />
@@ -208,8 +217,11 @@ function Autopilot() {
               )}
             </div>
           ) : (
-            <div className="flex-1 text-xs text-muted-foreground flex items-center justify-center text-center py-8">
-              {a.analysing ? "Analysing…" : "No setup yet. Start autopilot to begin scanning."}
+            <div className="flex-1 flex flex-col gap-3">
+              <PriceLadderPlaceholder />
+              <div className="text-xs text-muted-foreground text-center">
+                {a.analysing ? "Analysing…" : "No setup yet. Start autopilot to begin scanning."}
+              </div>
             </div>
           )}
         </div>
