@@ -268,8 +268,21 @@ export const getAccountSnapshot = createServerFn({ method: "GET" })
     // account — never the internal paper account. The paper account is
     // mirror-synced to the broker balance so the two can never drift apart
     // and switching back to paper mode starts from the same number.
-    let account: Record<string, unknown> = {
-      ...(acct ?? { balance: 10000, equity: 10000, free_margin: 10000, margin_used: 0 }),
+    interface SnapshotAccount {
+      balance: number;
+      equity: number;
+      free_margin: number;
+      margin_used: number;
+      currency: string;
+      source: string;
+      broker_label?: string | null;
+      account_type?: string;
+    }
+    let account: SnapshotAccount = {
+      balance: Number(acct?.balance ?? 10000),
+      equity: Number(acct?.equity ?? 10000),
+      free_margin: Number(acct?.free_margin ?? 10000),
+      margin_used: Number(acct?.margin_used ?? 0),
       currency: "USD",
       source: "paper_account",
     };
