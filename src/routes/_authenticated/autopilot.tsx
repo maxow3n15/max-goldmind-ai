@@ -194,6 +194,15 @@ function Autopilot() {
                 {setup.direction === "BUY" ? <TrendingUp className="h-3 w-3 inline mr-1" /> : <TrendingDown className="h-3 w-3 inline mr-1" />}
                 {setup.direction} · R:R {fmtNum(setup.risk_reward, 2)}
               </div>
+              <PriceLadder
+                direction={setup.direction}
+                entry={Number(setup.entry)}
+                stopLoss={Number(setup.stop_loss)}
+                takeProfits={[setup.take_profit_1, setup.take_profit_2, setup.take_profit_3]
+                  .filter((v): v is number => v != null && Number.isFinite(Number(v)))
+                  .map(Number)}
+                price={a.market.quote?.mid ?? null}
+              />
               <div className="grid grid-cols-2 gap-1 font-mono">
                 <Kv k="Entry" v={fmtNum(setup.entry, 2)} />
                 <Kv k="Stop" v={fmtNum(setup.stop_loss, 2)} tone="danger" />
@@ -208,8 +217,11 @@ function Autopilot() {
               )}
             </div>
           ) : (
-            <div className="flex-1 text-xs text-muted-foreground flex items-center justify-center text-center py-8">
-              {a.analysing ? "Analysing…" : "No setup yet. Start autopilot to begin scanning."}
+            <div className="flex-1 flex flex-col gap-3">
+              <PriceLadderPlaceholder />
+              <div className="text-xs text-muted-foreground text-center">
+                {a.analysing ? "Analysing…" : "No setup yet. Start autopilot to begin scanning."}
+              </div>
             </div>
           )}
         </div>
@@ -392,6 +404,108 @@ function Module({ title, score, lines }: { title: string; score?: number; lines:
       <ul className="text-[10px] text-muted-foreground space-y-0.5">
         {lines.filter(Boolean).map((l, i) => <li key={i} className="truncate" title={l}>{l}</li>)}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Vertical price ladder for the current AI setup. High prices at the top.
+ * Rungs: stop loss, entry and each take-profit, labelled with price and R
+ * distance from entry. The red zone spans SL→entry, the gold zone entry→highest
+ * TP, and a gold marker tracks the live XAUUSD price.
+ */
+function PriceLadder({
+  direction,
+  entry,
+  stopLoss,
+  takeProfits,
+  price,
+}: {
+  direction: string;
+  entry: number;
+  stopLoss: number;
+  takeProfits: number[];
+  price: number | null;
+}) {
+  const levels = [stopLoss, entry, ...takeProfits, ...(price != null ? [price] : [])];
+  const min = Math.min(...levels);
+  const max = Math.max(...levels);
+  const pad = (max - min) * 0.08 || 1;
+  const lo = min - pad;
+  const hi = max + pad;
+  const pct = (p: number) => ((hi - p) / (hi - lo)) * 100; // top = highest price
+
+  const risk = Math.abs(entry - stopLoss);
+  const rOf = (p: number) =>
+    risk > 0 ? (direction === "BUY" ? p - entry : entry - p) / risk : 0;
+  const fmtR = (r: number) => `${r > 0 ? "+" : ""}${r.toFixed(1)}R`;
+
+  const rungs = [
+    { key: "sl", label: "SL", price: stopLoss, tone: "text-[color:var(--destructive)]" },
+    { key: "entry", label: "Entry", price: entry, tone: "text-foreground" },
+    ...takeProfits.map((tp, i) => ({
+      key: `tp${i + 1}`,
+      label: `TP${i + 1}`,
+      price: tp,
+      tone: "text-[color:var(--gold)]",
+    })),
+  ];
+
+  const topTp = Math.max(...takeProfits, entry);
+  const botTp = Math.min(...takeProfits, entry);
+  // Zones: red between SL and entry, gold between entry and the furthest TP.
+  const redTop = pct(Math.max(stopLoss, entry));
+  const redHeight = pct(Math.min(stopLoss, entry)) - redTop;
+  const goldTop = pct(Math.max(entry, topTp));
+  const goldHeight = pct(Math.min(entry, direction === "BUY" ? topTp : botTp)) - goldTop;
+
+  return (
+    <div className="relative h-56 rounded-lg border border-border/40 bg-background/40 overflow-hidden">
+      {/* SL zone */}
+      <div className="absolute left-0 right-0 bg-[color:var(--destructive)]/10" style={{ top: `${redTop}%`, height: `${redHeight}%` }} />
+      {/* TP zone */}
+      <div className="absolute left-0 right-0 bg-[color:var(--gold)]/10" style={{ top: `${goldTop}%`, height: `${goldHeight}%` }} />
+
+      {rungs.map((rung) => (
+        <div key={rung.key} className="absolute left-0 right-0 flex items-center gap-2 px-2" style={{ top: `calc(${pct(rung.price)}% - 7px)` }}>
+          <span className={cn("text-[9px] font-semibold uppercase tracking-wider w-8 shrink-0", rung.tone)}>{rung.label}</span>
+          <div className={cn("h-px flex-1", rung.key === "entry" ? "bg-muted-foreground/60" : rung.key === "sl" ? "bg-[color:var(--destructive)]/50" : "bg-[color:var(--gold)]/50")} />
+          <span className="font-mono text-[10px] tabular-nums text-muted-foreground shrink-0">{fmtNum(rung.price, 2)}</span>
+          <span className={cn("font-mono text-[10px] tabular-nums w-11 text-right shrink-0", rung.tone)}>
+            {rung.key === "entry" ? "0R" : fmtR(rOf(rung.price))}
+          </span>
+        </div>
+      ))}
+
+      {price != null && (
+        <div className="absolute left-0 right-0 pointer-events-none" style={{ top: `calc(${pct(price)}% - 5px)` }}>
+          <div className="flex items-center gap-1.5 px-1">
+            <div className="h-2.5 w-2.5 rounded-full bg-[color:var(--gold)] ring-2 ring-background shrink-0" />
+            <div className="h-px flex-1 bg-[color:var(--gold)]/70" style={{ backgroundImage: "repeating-linear-gradient(90deg, var(--gold) 0 4px, transparent 4px 8px)", backgroundColor: "transparent" }} />
+            <span className="font-mono text-[10px] tabular-nums text-[color:var(--gold)] shrink-0">{fmtNum(price, 2)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Faded ladder shown until the first analysis produces a setup. */
+function PriceLadderPlaceholder() {
+  return (
+    <div className="relative h-56 rounded-lg border border-border/40 bg-background/40 overflow-hidden opacity-40">
+      <div className="absolute left-0 right-0 bg-[color:var(--destructive)]/10" style={{ top: "62%", height: "26%" }} />
+      <div className="absolute left-0 right-0 bg-[color:var(--gold)]/10" style={{ top: "12%", height: "50%" }} />
+      {["TP3", "TP2", "TP1", "Entry", "SL"].map((label, i) => (
+        <div key={label} className="absolute left-0 right-0 flex items-center gap-2 px-2" style={{ top: `${12 + i * 17}%` }}>
+          <span className="text-[9px] font-semibold uppercase tracking-wider w-8 shrink-0 text-muted-foreground">{label}</span>
+          <div className="h-px flex-1 bg-muted-foreground/30" />
+          <span className="font-mono text-[10px] text-muted-foreground/50 shrink-0">—</span>
+        </div>
+      ))}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-xs text-muted-foreground bg-background/70 rounded-full px-3 py-1">Waiting for analysis…</span>
+      </div>
     </div>
   );
 }
