@@ -62,6 +62,65 @@ export const recordDecisions = createServerFn({ method: "POST" })
     return { persisted: rows.length };
   });
 
+export interface ConfidenceCeilingCycle {
+  cycleId: string;
+  decidedAt: string;
+  confidence: number;
+  outcome: string;
+  factors: {
+    key: string;
+    verdict: "pass" | "partial" | "fail" | "unavailable";
+    points: number;
+    weight: number;
+    ratio: number;
+    detail: string;
+  }[] | null;
+}
+
+/**
+ * The 10 highest-confidence cycles from the last 30 days, with their
+ * structured confidence-factor verdicts (when the cycle recorded them).
+ * Powers the "Confidence ceiling" heatmap on the diagnostics page.
+ */
+export const listConfidenceCeiling = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<ConfidenceCeilingCycle[]> => {
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await context.supabase
+      .from("decision_logs")
+      .select("cycle_id, decided_at, confidence, outcome, payload")
+      .gte("decided_at", since)
+      .not("confidence", "is", null)
+      .order("confidence", { ascending: false })
+      .limit(10);
+    if (error) throw new Error(error.message);
+    return (data ?? []).map((row) => {
+      const payload = (row.payload ?? {}) as Record<string, unknown>;
+      const raw = payload.structured_factors;
+      const factors = Array.isArray(raw)
+        ? raw
+            .filter((f): f is Record<string, unknown> => typeof f === "object" && f !== null)
+            .map((f) => ({
+              key: String(f.key ?? ""),
+              verdict: (["pass", "partial", "fail", "unavailable"].includes(String(f.verdict))
+                ? String(f.verdict)
+                : "unavailable") as "pass" | "partial" | "fail" | "unavailable",
+              points: Number(f.points ?? 0),
+              weight: Number(f.weight ?? 0),
+              ratio: Number(f.ratio ?? 0),
+              detail: String(f.detail ?? ""),
+            }))
+        : null;
+      return {
+        cycleId: String(row.cycle_id),
+        decidedAt: String(row.decided_at),
+        confidence: Number(row.confidence ?? 0),
+        outcome: String(row.outcome),
+        factors: factors && factors.length > 0 ? factors : null,
+      };
+    });
+  });
+
 /** Read the audit trail back for analytics and diagnostics. */
 export const listDecisions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
