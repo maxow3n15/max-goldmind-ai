@@ -9,7 +9,7 @@ import { getLearningInsights, getNoTradeInsights } from "@/lib/learning.function
 import { getActiveZones } from "@/lib/zones.functions";
 import { REGIME_LABEL } from "@/lib/services/environment";
 import { TIER_LABEL } from "@/lib/services/adaptive";
-import { fmtPct, fmtUsd } from "@/lib/format";
+import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/intelligence")({
   component: IntelligencePage,
