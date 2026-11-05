@@ -254,7 +254,7 @@ function Dashboard() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-[10px] uppercase tracking-widest text-muted-foreground text-left">
-                <tr><th className="py-2">Dir</th><th>Entry</th><th>SL</th><th>TP1</th><th>Size</th><th>Conf</th><th>Session</th><th></th></tr>
+                <tr><th className="py-2">Dir</th><th>Entry</th><th>SL</th><th>TP1</th><th className="w-40">Progress</th><th>Size</th><th>Conf</th><th>Session</th><th></th></tr>
               </thead>
               <tbody>
                 {openTrades.map((t: any) => (
@@ -263,6 +263,15 @@ function Dashboard() {
                     <td>{fmtNum(t.entry_price, 2)}</td>
                     <td className="text-[color:var(--destructive)]">{fmtNum(t.stop_loss, 2)}</td>
                     <td className="text-[color:var(--success)]">{fmtNum(t.take_profit_1, 2)}</td>
+                    <td className="py-2.5 pr-3">
+                      <TradeProgressBar
+                        direction={t.direction}
+                        entry={Number(t.entry_price)}
+                        stopLoss={Number(t.stop_loss)}
+                        takeProfit={t.take_profit_1 != null ? Number(t.take_profit_1) : null}
+                        price={market.quote?.mid ?? null}
+                      />
+                    </td>
                     <td>{fmtNum(t.lot_size, 2)}</td>
                     <td>{Math.round(t.confidence ?? 0)}%</td>
                     <td className="font-sans">{t.session ?? "—"}</td>
@@ -278,6 +287,62 @@ function Dashboard() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Slim SL→TP1 progress bar for an open trade. Left end = stop loss, right end
+ * = TP1. The fill runs from the entry to the current price: gold when price
+ * is on the take-profit side of entry, red when it is on the stop-loss side.
+ * The gold dot marks the live price; the label is the live R-multiple.
+ */
+function TradeProgressBar({
+  direction,
+  entry,
+  stopLoss,
+  takeProfit,
+  price,
+}: {
+  direction: string;
+  entry: number;
+  stopLoss: number;
+  takeProfit: number | null;
+  price: number | null;
+}) {
+  if (takeProfit == null || price == null || !Number.isFinite(entry) || !Number.isFinite(stopLoss) || takeProfit === stopLoss) {
+    return <span className="text-muted-foreground text-xs">—</span>;
+  }
+  const span = takeProfit - stopLoss;
+  const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
+  const pos = clamp01((price - stopLoss) / span);
+  const entryPos = clamp01((entry - stopLoss) / span);
+  const risk = Math.abs(entry - stopLoss);
+  const r = risk > 0
+    ? (direction === "BUY" ? price - entry : entry - price) / risk
+    : 0;
+  const winning = r >= 0;
+  const fillLeft = Math.min(pos, entryPos) * 100;
+  const fillWidth = Math.abs(pos - entryPos) * 100;
+
+  return (
+    <div className="flex items-center gap-2 min-w-36">
+      <div className="relative h-1.5 flex-1 rounded-full bg-secondary/60" title={`SL ${fmtNum(stopLoss, 2)} → TP1 ${fmtNum(takeProfit, 2)}`}>
+        <div
+          className={`absolute top-0 h-full rounded-full ${winning ? "bg-[color:var(--gold)]" : "bg-[color:var(--destructive)]"}`}
+          style={{ left: `${fillLeft}%`, width: `${fillWidth}%` }}
+        />
+        {/* entry tick */}
+        <div className="absolute top-[-2px] h-[10px] w-px bg-muted-foreground/70" style={{ left: `${entryPos * 100}%` }} />
+        {/* live price marker */}
+        <div
+          className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[color:var(--gold)] ring-2 ring-background"
+          style={{ left: `${pos * 100}%` }}
+        />
+      </div>
+      <span className={`font-mono text-xs tabular-nums w-14 text-right ${winning ? "text-[color:var(--gold)]" : "text-[color:var(--destructive)]"}`}>
+        {r >= 0 ? "+" : ""}{r.toFixed(2)}R
+      </span>
     </div>
   );
 }
