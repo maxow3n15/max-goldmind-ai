@@ -142,9 +142,9 @@ function Dashboard() {
         <StatCard label="Equity" value={fmtMoney(Number(snapshot.data?.account?.equity ?? 0), String(snapshot.data?.account?.currency ?? "USD"))} />
         <StatCard label="Free margin" value={fmtMoney(Number(snapshot.data?.account?.free_margin ?? 0), String(snapshot.data?.account?.currency ?? "USD"))} />
         <StatCard label="Daily P&L" tone={(snapshot.data?.daily_pnl ?? 0) >= 0 ? "success" : "danger"}
-          value={fmtUsd(snapshot.data?.daily_pnl ?? 0)} />
+          value={fmtMoney(snapshot.data?.daily_pnl ?? 0, String(snapshot.data?.account?.currency ?? "USD"))} />
         <StatCard label="Weekly P&L" tone={(snapshot.data?.weekly_pnl ?? 0) >= 0 ? "success" : "danger"}
-          value={fmtUsd(snapshot.data?.weekly_pnl ?? 0)} />
+          value={fmtMoney(snapshot.data?.weekly_pnl ?? 0, String(snapshot.data?.account?.currency ?? "USD"))} />
         <StatCard label="Win rate" value={fmtPct(snapshot.data?.win_rate ?? 0)} hint={`${snapshot.data?.closed_count ?? 0} closed · ${snapshot.data?.open_count ?? 0} open`} />
       </div>
 
