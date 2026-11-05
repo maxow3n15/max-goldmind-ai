@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { Brain, Compass, ShieldCheck, Gauge, Ban } from "lucide-react";
+import { Brain, Compass, ShieldCheck, Gauge, Ban, Layers } from "lucide-react";
 import { useAutopilotContext } from "@/providers/AutopilotProvider";
 import { getChallengeStatus } from "@/lib/challenge.functions";
 import { getForensics } from "@/lib/forensics.functions";
 import { getLearningInsights, getNoTradeInsights } from "@/lib/learning.functions";
+import { getActiveZones } from "@/lib/zones.functions";
 import { REGIME_LABEL } from "@/lib/services/environment";
 import { TIER_LABEL } from "@/lib/services/adaptive";
 import { fmtPct, fmtUsd } from "@/lib/format";
@@ -56,6 +57,8 @@ function IntelligencePage() {
   const forensics = useQuery({ queryKey: ["forensics"], queryFn: () => forensicsFn() });
   const learning = useQuery({ queryKey: ["learning-insights"], queryFn: () => learningFn() });
   const noTrade = useQuery({ queryKey: ["no-trade-insights"], queryFn: () => noTradeFn() });
+  const zonesFn = useServerFn(getActiveZones);
+  const zones = useQuery({ queryKey: ["active-zones"], queryFn: () => zonesFn(), refetchInterval: 60_000 });
 
   const env = a.environment;
   const status: any = challenge.data?.status ?? null;
@@ -74,6 +77,60 @@ function IntelligencePage() {
           is derived from your own stored trades and decision log — nothing is estimated.
         </p>
       </header>
+
+      <Panel title="Active zones" icon={Layers}>
+        {zones.isLoading ? (
+          <p className="text-xs text-muted-foreground">Scanning structure…</p>
+        ) : !zones.data || zones.data.zones.length === 0 ? (
+          <p className="text-xs text-muted-foreground">No active zones</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-muted-foreground border-b border-border/40">
+                  <th className="pb-2 pr-3 font-medium">Type</th>
+                  <th className="pb-2 pr-3 font-medium">Bias</th>
+                  <th className="pb-2 pr-3 font-medium">TF</th>
+                  <th className="pb-2 pr-3 font-medium text-right">Price range</th>
+                  <th className="pb-2 font-medium text-right">Distance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {zones.data.zones.map((z, i) => (
+                  <tr key={i} className="border-b border-border/20 last:border-0">
+                    <td className="py-1.5 pr-3">{z.kind}</td>
+                    <td className="py-1.5 pr-3">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+                          z.direction === "bullish"
+                            ? "bg-[color:var(--gold)]/15 text-[color:var(--gold)]"
+                            : "bg-[color:var(--destructive)]/15 text-[color:var(--destructive)]"
+                        }`}
+                      >
+                        {z.direction}
+                      </span>
+                    </td>
+                    <td className="py-1.5 pr-3 text-muted-foreground">{z.timeframe}</td>
+                    <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
+                      {fmtNum(z.bottom, 2)} – {fmtNum(z.top, 2)}
+                    </td>
+                    <td className="py-1.5 text-right font-mono tabular-nums">
+                      {z.distUsd === 0 ? (
+                        <span className="text-[color:var(--gold)]">inside</span>
+                      ) : (
+                        <>
+                          ${fmtNum(z.distUsd, 2)}
+                          {z.distAtr != null && <span className="text-muted-foreground"> · {fmtNum(z.distAtr, 1)} ATR</span>}
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Panel title="Market environment" icon={Compass}>
