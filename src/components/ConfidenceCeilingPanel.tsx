@@ -151,7 +151,7 @@ export function ConfidenceCeilingPanel() {
                               )}
                               title={
                                 f
-                                  ? `${f.label ?? FACTOR_LABELS[key]}: ${f.verdict} — ${f.points}/${f.weight} pts. ${f.detail}`
+                                  ? `${FACTOR_LABELS[key] ?? f.key}: ${f.verdict} — ${f.points}/${f.weight} pts. ${f.detail}`
                                   : cycle.factors
                                     ? "Not evaluated in this cycle"
                                     : "Factors not recorded for this cycle"
