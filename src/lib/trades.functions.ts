@@ -242,6 +242,42 @@ export const closePaperTrade = createServerFn({ method: "POST" })
     return { pnl };
   });
 
+const BreakevenInput = z.object({ id: z.string().uuid() });
+
+/**
+ * Move an open trade's stop loss to its entry price. Live trades go through
+ * the broker modify path (which verifies the broker actually accepted the new
+ * stop); paper trades update the row directly.
+ */
+export const moveStopToBreakeven = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => BreakevenInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: trade, error } = await context.supabase
+      .from("trades").select("*").eq("id", data.id).eq("user_id", context.userId).single();
+    if (error || !trade) throw new Error("Trade not found");
+    if (trade.status !== "open") throw new Error("Trade is not open");
+
+    const entry = Number(trade.entry_price);
+    if (Math.abs(Number(trade.stop_loss) - entry) < 1e-9) {
+      return { ok: true as const, already: true };
+    }
+
+    if (trade.mode === "live") {
+      const { modifyLiveOrderCore } = await import("@/lib/brokers/live-execution.server");
+      const res = await modifyLiveOrderCore(context.supabase, context.userId, {
+        id: trade.id, stop_loss: entry,
+      });
+      if ((res as any)?.ok === false) throw new Error((res as any)?.reason ?? "Broker did not confirm the new stop");
+    } else {
+      const { error: uErr } = await context.supabase.from("trades").update({
+        stop_loss: entry,
+      }).eq("id", trade.id).eq("user_id", context.userId);
+      if (uErr) throw new Error(uErr.message);
+    }
+    return { ok: true as const, already: false };
+  });
+
 export const listTrades = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
