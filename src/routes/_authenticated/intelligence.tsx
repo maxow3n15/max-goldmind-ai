@@ -96,9 +96,30 @@ function IntelligencePage() {
                 </tr>
               </thead>
               <tbody>
-                {zones.data.zones.map((z, i) => (
+                {[...zones.data.zones]
+                  .sort((a, b) => Number(b.distUsd === 0) - Number(a.distUsd === 0) || a.distUsd - b.distUsd)
+                  .map((z, i) => {
+                  const inside = z.distUsd === 0;
+                  const tone = z.direction === "bullish" ? "var(--gold)" : "var(--destructive)";
+                  return (
                   <tr key={i} className="border-b border-border/20 last:border-0">
-                    <td className="py-1.5 pr-3">{z.kind}</td>
+                    <td className="py-1.5 pr-3">
+                      <span className="flex items-center gap-1.5">
+                        {z.kind}
+                        {inside && (
+                          <span
+                            className="relative inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"
+                            style={{ color: tone, background: `color-mix(in srgb, ${tone} 15%, transparent)` }}
+                          >
+                            <span className="relative flex h-1.5 w-1.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60" style={{ background: tone }} />
+                              <span className="relative inline-flex h-1.5 w-1.5 rounded-full" style={{ background: tone }} />
+                            </span>
+                            Price inside
+                          </span>
+                        )}
+                      </span>
+                    </td>
                     <td className="py-1.5 pr-3">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
@@ -115,8 +136,8 @@ function IntelligencePage() {
                       {fmtNum(z.bottom, 2)} – {fmtNum(z.top, 2)}
                     </td>
                     <td className="py-1.5 text-right font-mono tabular-nums">
-                      {z.distUsd === 0 ? (
-                        <span className="text-[color:var(--gold)]">inside</span>
+                      {inside ? (
+                        <span style={{ color: tone }}>0.0 ATR</span>
                       ) : (
                         <>
                           ${fmtNum(z.distUsd, 2)}
@@ -125,7 +146,8 @@ function IntelligencePage() {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                  })}
               </tbody>
             </table>
           </div>
