@@ -126,11 +126,16 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
       const closedAt = t.closed_at ? new Date(t.closed_at).getTime() : null;
       const entry = Number(t.entry_price);
       const exit = Number(t.exit_price);
-      // Prefer the live stop, but break-even management moves it to entry —
-      // fall back to the AI-planned stop so the R-multiple stays meaningful.
-      const plannedSl = Number(t.ai_analysis?.stop_loss);
-      let risk = Math.abs(entry - Number(t.stop_loss));
-      if (!risk && Number.isFinite(plannedSl)) risk = Math.abs(entry - plannedSl);
+      // Break-even management moves stop_loss to entry, so prefer the
+      // immutable initial stop; fall back to the live stop, then derive
+      // the original risk from TP1 distance and the planned R:R.
+      let risk = Math.abs(entry - Number(t.initial_stop_loss));
+      if (!risk) risk = Math.abs(entry - Number(t.stop_loss));
+      if (!risk) {
+        const tp1 = Number(t.take_profit_1);
+        const rr = Number(t.risk_reward);
+        if (Number.isFinite(tp1) && rr > 0) risk = Math.abs(tp1 - entry) / rr;
+      }
       if (opened == null || closedAt == null || !risk || !Number.isFinite(exit)) return null;
       const r = (t.direction === "BUY" ? exit - entry : entry - exit) / risk;
       const pnl = Number(t.pnl);
