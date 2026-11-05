@@ -8,7 +8,7 @@ import { MarketStatusCard } from "@/components/MarketStatusCard";
 import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
-import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
+import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade, moveStopToBreakeven } from "@/lib/trades.functions";
 import { flattenAllPositions } from "@/lib/live-control.functions";
 import { currentSession, fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { toast } from "sonner";
@@ -120,6 +120,16 @@ function Dashboard() {
       qc.invalidateQueries({ queryKey: ["snapshot"] });
     },
     onError: (e: any) => toast.error(e?.message ?? "Close failed"),
+  });
+
+  const breakevenFn = useSFn(moveStopToBreakeven);
+  const moveToBE = useMutation({
+    mutationFn: (id: string) => breakevenFn({ data: { id } }),
+    onSuccess: (d: any) => {
+      toast.success(d?.already ? "Stop already at break-even" : "Stop moved to break-even");
+      qc.invalidateQueries({ queryKey: ["trades"] });
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Could not move stop"),
   });
 
   const setup = analyze.data;
