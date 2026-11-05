@@ -157,31 +157,28 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
     const range = RANGES[data.timeframe] ?? "2y";
     const longDays = data.longHistoryDays;
 
-    let candles: any[] = [];
-    let dataSourceNote = `Yahoo ${interval} ${range}`;
+    // Long-history mode: bid/ask candles paged backwards from the user's own
+    // OANDA connection. The pager caps at 40 × 5000 bars, so very fine
+    // timeframes simply return fewer years — reported, never faked.
+    let oanda: { credentials: Record<string, string>; environment: string } | null = null;
     if (longDays > 0) {
       const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
         await import("@/lib/brokers/live-execution.server");
-      const conn = await loadDefaultBrokerConnection((await import("@/integrations/supabase/client.server")).supabaseAdmin, (data as any).__userId ?? undefined).catch(() => null);
-      // loadDefaultBrokerConnection needs the caller's user id; use the
-      // authenticated context passed through the middleware instead.
+      const conn = await loadDefaultBrokerConnection(context.supabase, context.userId).catch(() => null);
       if (!conn || conn.broker_id !== "oanda") {
         return { ok: false as const, reason: "Long-history studies need a default OANDA connection." };
       }
+      const resolved = await resolveConnectionEnvironment(conn);
+      oanda = {
+        credentials: resolved.credentials,
+        environment: resolved.env.endsWith("_live") ? "live" : "practice",
+      };
     }
 
-    if (longDays > 0) {
-      const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
-        await import("@/lib/brokers/live-execution.server");
-      const { context } = { context: null as any };
-      void context;
-      // Resolved below with the authenticated supabase client.
-      const conn = await loadDefaultBrokerConnection((globalThis as any).__sb ?? null, null).catch(() => null);
-      void conn;
-      void resolveConnectionEnvironment;
-    }
-
-    candles = await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
+    const { fetchOandaHistory } = await import("@/lib/backtest/oanda-history.server");
+    const candles = oanda
+      ? (await fetchOandaHistory({ credentials: oanda.credentials, environment: oanda.environment, timeframe: data.timeframe, days: longDays })).candles
+      : await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
     if (candles.length < 2_000) {
       return { ok: false as const, reason: "Not enough history for a walk-forward study on this timeframe." };
     }
@@ -192,10 +189,14 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
     const finerLoaded: string[] = [];
     const finerMissing: string[] = [];
     for (const spec of FINER[data.timeframe] ?? []) {
-      const c = await fetchCandles(GOLD_SYMBOL, spec.interval, spec.range, 300_000).catch(() => []);
+      const c = oanda
+        ? await fetchOandaHistory({ credentials: oanda.credentials, environment: oanda.environment, timeframe: spec.tf, days: longDays })
+            .then((h) => h.candles)
+            .catch(() => [])
+        : await fetchCandles(GOLD_SYMBOL, spec.interval, spec.range, 300_000).catch(() => []);
       if (c.length >= 200) {
         finerSeries[spec.tf] = c;
-        finerLoaded.push(`${spec.tf}m (${c.length} bars, ${spec.range})`);
+        finerLoaded.push(`${spec.tf}m (${c.length} bars${oanda ? `, ${longDays}d OANDA` : `, ${spec.range}`})`);
       } else {
         finerMissing.push(`${spec.tf}m`);
       }
