@@ -9,8 +9,19 @@ import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
 import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
+import { flattenAllPositions } from "@/lib/live-control.functions";
 import { currentSession, fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Activity, Brain, Clock, TrendingUp, TrendingDown, Wallet, Layers, Target, X, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -113,6 +124,35 @@ function Dashboard() {
 
   const setup = analyze.data;
   const openTrades = (trades.data ?? []).filter((t: any) => t.status === "open");
+
+  // Combined live P&L of all open positions at the current mid price.
+  const livePrice = market.quote?.mid ?? null;
+  const combinedPnl = livePrice == null
+    ? null
+    : openTrades.reduce((sum: number, t: any) => {
+        const diff = t.direction === "BUY" ? livePrice - Number(t.entry_price) : Number(t.entry_price) - livePrice;
+        return sum + diff * 100 * Number(t.lot_size);
+      }, 0);
+
+  const [confirmCloseAll, setConfirmCloseAll] = useState(false);
+  const flattenFn = useSFn(flattenAllPositions);
+  const closeAll = useMutation({
+    mutationFn: () => flattenFn({ data: { confirm: true } }),
+    onSuccess: (d: any) => {
+      setConfirmCloseAll(false);
+      if (d?.failed > 0) {
+        toast.warning(`Closed ${d.closed} of ${d.closed + d.failed} — ${d.failed} need reconciliation`);
+      } else {
+        toast.success(`Closed all ${d?.closed ?? 0} position${(d?.closed ?? 0) === 1 ? "" : "s"}`);
+      }
+      qc.invalidateQueries({ queryKey: ["trades"] });
+      qc.invalidateQueries({ queryKey: ["snapshot"] });
+    },
+    onError: (e: any) => {
+      setConfirmCloseAll(false);
+      toast.error(e?.message ?? "Close all failed");
+    },
+  });
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-[1600px] mx-auto">
