@@ -6,6 +6,7 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -37,7 +38,7 @@ function NotFoundComponent() {
   );
 }
 
-function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorComponent({ error, reset }: ErrorComponentProps) {
   console.error(error);
   const router = useRouter();
   const diag = getDiagnostics();
@@ -66,7 +67,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           The interface hit an unexpected problem. Your data and any open positions are unaffected.
         </p>
         <p className="mt-3 rounded-md border border-border/60 bg-background/50 p-2.5 font-mono text-[11px] text-muted-foreground break-words">
-          {error?.message ?? "Unknown error"}
+          {error instanceof Error ? error.message : "Unknown error"}
         </p>
 
         <dl className="mt-4 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">

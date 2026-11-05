@@ -8,6 +8,7 @@ import type { LatencyStat } from "@/engines/kernel/metrics";
 import { cn } from "@/lib/utils";
 import { HeartbeatPanel } from "@/components/HeartbeatPanel";
 import { AiHealthPanel } from "@/components/AiHealthPanel";
+import { ConfidenceCeilingPanel } from "@/components/ConfidenceCeilingPanel";
 
 export const Route = createFileRoute("/_authenticated/diagnostics")({
   head: () => ({
@@ -99,6 +100,8 @@ function DiagnosticsPage() {
         <HeartbeatPanel />
 
         <AiHealthPanel />
+
+        <ConfidenceCeilingPanel />
 
         <section className="glass-panel p-5">
           <h2 className="font-display font-semibold mb-1 flex items-center gap-2">
