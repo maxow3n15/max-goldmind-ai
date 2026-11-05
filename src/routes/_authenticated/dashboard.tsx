@@ -9,7 +9,7 @@ import { AIStatusPanel } from "@/components/AIStatusPanel";
 import { useMarketData } from "@/hooks/useMarketData";
 import { analyzeMarket } from "@/lib/ai.functions";
 import { openPaperTrade, getAccountSnapshot, listTrades, closePaperTrade } from "@/lib/trades.functions";
-import { currentSession, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
+import { currentSession, fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { toast } from "sonner";
 import { Activity, Brain, Clock, TrendingUp, TrendingDown, Wallet, Layers, Target, X, Loader2 } from "lucide-react";
 

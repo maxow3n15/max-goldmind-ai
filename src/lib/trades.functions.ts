@@ -313,7 +313,7 @@ export const getAccountSnapshot = createServerFn({ method: "GET" })
       .reduce((a, t) => a + Number(t.pnl), 0);
     const wins = closed.filter((t) => Number(t.pnl) > 0).length;
     return {
-      account: acct ?? { balance: 10000, equity: 10000, free_margin: 10000, margin_used: 0 },
+      account,
       open_count: open.length,
       closed_count: closed.length,
       daily_pnl: sumSince(dayStart),
