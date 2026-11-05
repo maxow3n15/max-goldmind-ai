@@ -148,7 +148,7 @@ function mergeModels(rows: ChunkReport[]): Map<string, ModelStats> {
 export const runCalibrationStudy = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { fetchCandles } = await import("@/lib/candles.server");
     const { runPipelineBacktest, DEFAULT_PIPELINE_CONFIG } = await import("@/lib/backtest/pipeline-engine");
     const { buildFidelityCaveats } = await import("@/lib/backtest/pipeline-adapter");
