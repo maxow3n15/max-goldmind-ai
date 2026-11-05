@@ -9,7 +9,7 @@ import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
 import { ManualCyclePanel } from "@/components/autopilot/ManualCyclePanel";
 
 
-import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
+import { fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import {
   Activity, AlertTriangle, Ban, Bot, CheckCircle2, ChevronRight, Info,
   Loader2, Pause, Play, ShieldAlert, ShieldCheck, TrendingDown, TrendingUp, XCircle,
@@ -354,7 +354,7 @@ function Autopilot() {
         <Metric label="Loss streak" value={String(a.consecutiveLosses)} tone={a.consecutiveLosses >= 2 ? "danger" : undefined} />
         <Metric label="Daily P&L" value={fmtUsd(a.snapshot?.daily_pnl ?? 0)}
           tone={(a.snapshot?.daily_pnl ?? 0) >= 0 ? "success" : "danger"}
-          hint={`Balance ${fmtUsd(Number(a.snapshot?.account?.balance ?? 0))}`} />
+          hint={`Balance ${fmtMoney(Number(a.snapshot?.account?.balance ?? 0), String((a.snapshot?.account as any)?.currency ?? "USD"))}`} />
       </div>
 
       {/* MT5 placeholder card */}
