@@ -27,10 +27,11 @@ export function CalibrationReportPanel() {
   const [timeframe, setTimeframe] = useState<(typeof TIMEFRAMES)[number]>("60");
   const [chunks, setChunks] = useState(4);
   const [researchFloor, setResearchFloor] = useState(88);
+  const [longHistoryDays, setLongHistoryDays] = useState(0);
   const [report, setReport] = useState<any | null>(null);
 
   const run = useMutation({
-    mutationFn: () => studyFn({ data: { timeframe, chunks, researchFloor, realCorrelation: true } }),
+    mutationFn: () => studyFn({ data: { timeframe, chunks, researchFloor, realCorrelation: true, longHistoryDays } }),
     onSuccess: (res: any) => {
       if (!res?.ok) { toast.error(res?.reason ?? "Study failed"); return; }
       setReport(res);
@@ -63,7 +64,7 @@ export function CalibrationReportPanel() {
         </button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-4">
         <label className="text-xs space-y-1">
           <span className="text-muted-foreground">Timeframe</span>
           <select
@@ -87,6 +88,14 @@ export function CalibrationReportPanel() {
           <input
             type="number" min={50} max={99} value={researchFloor}
             onChange={(e) => setResearchFloor(Math.max(50, Math.min(99, Number(e.target.value) || 88)))}
+            className="w-full rounded-lg bg-background/60 border border-border px-2 py-2 text-sm tabular-nums"
+          />
+        </label>
+        <label className="text-xs space-y-1">
+          <span className="text-muted-foreground">History days (0 = default)</span>
+          <input
+            type="number" min={0} max={2922} value={longHistoryDays}
+            onChange={(e) => setLongHistoryDays(Math.max(0, Math.min(2922, Number(e.target.value) || 0)))}
             className="w-full rounded-lg bg-background/60 border border-border px-2 py-2 text-sm tabular-nums"
           />
         </label>

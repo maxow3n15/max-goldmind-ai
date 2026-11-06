@@ -52,6 +52,11 @@ const Input = z.object({
   /** Measurement floor. Never below 50; never applied to live trading. */
   researchFloor: z.number().min(50).max(99).default(CONFIDENCE_GATES.FINAL),
   realCorrelation: z.boolean().default(true),
+  /**
+   * 0 = provider default window (Yahoo). >0 = pull that many days of bid/ask
+   * history from the user's OANDA connection instead — up to ~8 years.
+   */
+  longHistoryDays: z.number().int().min(0).max(2922).default(0),
 });
 
 export interface ChunkReport {
@@ -143,14 +148,37 @@ function mergeModels(rows: ChunkReport[]): Map<string, ModelStats> {
 export const runCalibrationStudy = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const { fetchCandles } = await import("@/lib/candles.server");
     const { runPipelineBacktest, DEFAULT_PIPELINE_CONFIG } = await import("@/lib/backtest/pipeline-engine");
     const { buildFidelityCaveats } = await import("@/lib/backtest/pipeline-adapter");
 
     const interval = INTERVALS[data.timeframe] ?? "60m";
     const range = RANGES[data.timeframe] ?? "2y";
-    const candles = await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
+    const longDays = data.longHistoryDays;
+
+    // Long-history mode: bid/ask candles paged backwards from the user's own
+    // OANDA connection. The pager caps at 40 × 5000 bars, so very fine
+    // timeframes simply return fewer years — reported, never faked.
+    let oanda: { credentials: Record<string, string>; environment: string } | null = null;
+    if (longDays > 0) {
+      const { loadDefaultBrokerConnection, resolveConnectionEnvironment } =
+        await import("@/lib/brokers/live-execution.server");
+      const conn = await loadDefaultBrokerConnection(context.supabase, context.userId).catch(() => null);
+      if (!conn || conn.broker_id !== "oanda") {
+        return { ok: false as const, reason: "Long-history studies need a default OANDA connection." };
+      }
+      const resolved = await resolveConnectionEnvironment(conn);
+      oanda = {
+        credentials: resolved.credentials,
+        environment: resolved.env.endsWith("_live") ? "live" : "practice",
+      };
+    }
+
+    const { fetchOandaHistory } = await import("@/lib/backtest/oanda-history.server");
+    const candles = oanda
+      ? (await fetchOandaHistory({ credentials: oanda.credentials, environment: oanda.environment, timeframe: data.timeframe, days: longDays })).candles
+      : await fetchCandles(GOLD_SYMBOL, interval, range, 300_000);
     if (candles.length < 2_000) {
       return { ok: false as const, reason: "Not enough history for a walk-forward study on this timeframe." };
     }
@@ -161,10 +189,14 @@ export const runCalibrationStudy = createServerFn({ method: "POST" })
     const finerLoaded: string[] = [];
     const finerMissing: string[] = [];
     for (const spec of FINER[data.timeframe] ?? []) {
-      const c = await fetchCandles(GOLD_SYMBOL, spec.interval, spec.range, 300_000).catch(() => []);
+      const c = oanda
+        ? await fetchOandaHistory({ credentials: oanda.credentials, environment: oanda.environment, timeframe: spec.tf, days: longDays })
+            .then((h) => h.candles)
+            .catch(() => [])
+        : await fetchCandles(GOLD_SYMBOL, spec.interval, spec.range, 300_000).catch(() => []);
       if (c.length >= 200) {
         finerSeries[spec.tf] = c;
-        finerLoaded.push(`${spec.tf}m (${c.length} bars, ${spec.range})`);
+        finerLoaded.push(`${spec.tf}m (${c.length} bars${oanda ? `, ${longDays}d OANDA` : `, ${spec.range}`})`);
       } else {
         finerMissing.push(`${spec.tf}m`);
       }
