@@ -26,6 +26,7 @@ import { computeStructuredConfidence, type StructuredConfidence, type FactorKey 
 import type { MultiTimeframeReport } from "./mtf";
 import type { StructureRead } from "./structure";
 import { computeComposite, sizeMultiplier } from "./scoring";
+import { effectiveConfidenceFloor } from "./confidence-floor";
 import { classifySetup, type SetupClassification } from "./setup-models";
 
 /* ------------------------------------------------------------------ */
@@ -197,6 +198,14 @@ export interface OrchestratorInput {
    */
   researchConfidenceFloor?: number | null;
   /**
+   * True only when the execution destination was positively resolved
+   * server-side as a demo/practice broker environment. Combined with
+   * `settings.demo_confidence_floor` this lets paper/demo forward-test below
+   * the live gate. Null/undefined is treated as real money — the floor stays
+   * at the live standard.
+   */
+  brokerIsDemo?: boolean | null;
+  /**
    * RESEARCH ONLY — replay harness. The consecutive-loss lockout latches until
    * an operator resets it; a multi-year replay has no operator, so the harness
    * supplies the streak measured since the current session started. Live
@@ -238,6 +247,8 @@ export interface OrchestratorDecision {
   dataQuality: DataQuality;
   /** Which named setup model the proposal satisfies, if any. */
   setup: SetupClassification;
+  /** The confidence gate actually applied this cycle (live standard, demo floor, or research floor). */
+  confidenceFloor: number;
 }
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
@@ -250,10 +261,17 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
   const s: any = i.settings ?? {};
 
   const environment = classifyEnvironment(i.quant, i.macro);
+  // Research replay wins when present; otherwise the floor is the live
+  // standard unless the destination is provably paper/demo and the user has
+  // configured a lower demo floor for forward testing.
   const confidenceFloor =
     i.researchConfidenceFloor != null && Number.isFinite(Number(i.researchConfidenceFloor))
       ? Number(i.researchConfidenceFloor)
-      : SAFETY_CONSTANTS.MIN_CONFIDENCE;
+      : effectiveConfidenceFloor({
+          tradingMode: i.tradingMode,
+          brokerIsDemo: i.brokerIsDemo ?? null,
+          demoFloor: s.demo_confidence_floor,
+        });
 
   const riskScore = computeRiskScore({
     settings: i.settings,
@@ -346,7 +364,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     macro: i.macro,
     composite,
     challenge: { enforced: i.challenge.enforced, status: i.challenge.status },
-    researchConfidenceFloor: i.researchConfidenceFloor ?? null,
+    researchConfidenceFloor: confidenceFloor,
   });
 
   const killSwitchTrip = evaluateKillSwitch({
@@ -398,6 +416,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     structured,
     dataQuality,
     setup: classification,
+    confidenceFloor,
   };
 
   // ---- Gates before sizing ---------------------------------------------
