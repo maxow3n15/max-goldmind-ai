@@ -33,9 +33,11 @@ export interface SafetyInput {
   /** Multi-timeframe agreement, 0..100. */
   mtfAlignment?: number | null;
   /**
-   * RESEARCH ONLY — replay/calibration harness. Lets a backtest measure what
-   * the confidence gate rejects. Never set by live code, so the production
-   * floor remains CONFIDENCE_GATES.FINAL.
+   * Caller-computed effective floor for this cycle. Two legitimate sources:
+   * the research replay/calibration harness (measuring what the gate rejects)
+   * and the demo/paper forward-test floor (services/confidence-floor.ts).
+   * Real-money live callers always pass CONFIDENCE_GATES.FINAL — the helper
+   * that computes it refuses to go lower for real money.
    */
   researchConfidenceFloor?: number | null;
 }

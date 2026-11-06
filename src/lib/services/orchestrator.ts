@@ -247,6 +247,8 @@ export interface OrchestratorDecision {
   dataQuality: DataQuality;
   /** Which named setup model the proposal satisfies, if any. */
   setup: SetupClassification;
+  /** The confidence gate actually applied this cycle (live standard, demo floor, or research floor). */
+  confidenceFloor: number;
 }
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
@@ -362,7 +364,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     macro: i.macro,
     composite,
     challenge: { enforced: i.challenge.enforced, status: i.challenge.status },
-    researchConfidenceFloor: i.researchConfidenceFloor ?? null,
+    researchConfidenceFloor: confidenceFloor,
   });
 
   const killSwitchTrip = evaluateKillSwitch({
@@ -414,6 +416,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     structured,
     dataQuality,
     setup: classification,
+    confidenceFloor,
   };
 
   // ---- Gates before sizing ---------------------------------------------
