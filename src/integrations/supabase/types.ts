@@ -699,6 +699,7 @@ export type Database = {
           avoid_news: boolean
           cooldown_minutes: number
           created_at: string
+          demo_confidence_floor: number | null
           execution_mode: string
           kill_switch_active: boolean
           kill_switch_reason: string | null
@@ -729,6 +730,7 @@ export type Database = {
           avoid_news?: boolean
           cooldown_minutes?: number
           created_at?: string
+          demo_confidence_floor?: number | null
           execution_mode?: string
           kill_switch_active?: boolean
           kill_switch_reason?: string | null
@@ -759,6 +761,7 @@ export type Database = {
           avoid_news?: boolean
           cooldown_minutes?: number
           created_at?: string
+          demo_confidence_floor?: number | null
           execution_mode?: string
           kill_switch_active?: boolean
           kill_switch_reason?: string | null
