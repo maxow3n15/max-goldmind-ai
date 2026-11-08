@@ -227,6 +227,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
       // or manages against a position we cannot account for.
       let reconciliationBlocked: string | null = null;
       let brokerEnvironment: string | null = null;
+      let brokerIsDemo: boolean | null = null;
       if (tradingMode === "live") {
         try {
           const { reconcileUserPositions } = await import("@/lib/services/reconciliation.server");
@@ -258,6 +259,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
           const conn = await loadDefaultBrokerConnection(supabaseAdmin, userId);
           const resolved = await resolveConnectionEnvironment(conn);
           brokerEnvironment = resolved.env;
+          brokerIsDemo = resolved.isDemo === true;
           const { getConnector } = await import("@/lib/brokers/connectors.server");
           const brokerAccount = await getConnector(conn.broker_id).fetchAccount(resolved.credentials);
           snapshot.account = {
@@ -315,6 +317,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         challenge,
         calibration,
         environmentTrackRecord: environmentTrackRecordFor(trades, preEnvKey),
+        brokerIsDemo,
         cycleId,
       });
 
@@ -441,6 +444,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         latency: {},
         payload: {
           source: "cron",
+          confidence_floor: decision.confidenceFloor,
           tier: decision.adaptive.tier,
           trading_mode: tradingMode,
           broker_environment: brokerEnvironment,

@@ -8,6 +8,7 @@
 
 import { SAFETY_CONSTANTS } from "./safety";
 import { fetchSpotQuote } from "./spot.server";
+import { effectiveConfidenceFloor } from "./confidence-floor";
 
 export interface OrderCandidate {
   direction: "BUY" | "SELL";
@@ -32,11 +33,13 @@ const MAX_ENTRY_DRIFT_PCT = 1.2;
 export async function revalidateOrder(
   order: OrderCandidate,
   settings: any | null,
+  env: { tradingMode: "paper" | "live"; brokerIsDemo: boolean | null } = { tradingMode: "live", brokerIsDemo: null },
 ): Promise<RevalidationResult> {
-  const minConfidence = Math.max(
-    SAFETY_CONSTANTS.MIN_CONFIDENCE,
-    Number(settings?.min_confidence ?? 0) || 0,
-  );
+  const floor = effectiveConfidenceFloor({ ...env, demoFloor: settings?.demo_confidence_floor });
+  const minConfidence =
+    floor < SAFETY_CONSTANTS.MIN_CONFIDENCE
+      ? floor
+      : Math.max(SAFETY_CONSTANTS.MIN_CONFIDENCE, Number(settings?.min_confidence ?? 0) || 0);
   const minRr = Math.max(
     SAFETY_CONSTANTS.MIN_RR,
     Number(settings?.min_risk_reward ?? 0) || 0,
