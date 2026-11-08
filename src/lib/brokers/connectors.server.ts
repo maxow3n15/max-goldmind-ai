@@ -270,7 +270,7 @@ const oandaBase = (env: string) =>
   env === "live" ? "https://api-fxtrade.oanda.com" : "https://api-fxpractice.oanda.com";
 
 const oandaHeaders = (c: Record<string, string>) => ({
-  Authorization: `Bearer ${c["token"] ?? ""}`,
+  Authorization: `Bearer ${cleanCredential(c["token"])}`,
   "Content-Type": "application/json",
 });
 
@@ -281,10 +281,26 @@ const oanda: BrokerConnector = {
   id: "oanda",
   async fetchAccount(c) {
     const base = oandaBase(c["environment"] ?? "practice");
-    const res = await req(`${base}/v3/accounts/${c["accountId"]}/summary`, {
-      label: "OANDA account summary",
-      headers: oandaHeaders(c),
-    });
+    const accountId = cleanCredential(c["accountId"]);
+    let res: any;
+    try {
+      res = await req(`${base}/v3/accounts/${accountId}/summary`, {
+        label: "OANDA account summary",
+        headers: oandaHeaders(c),
+      });
+    } catch (e: any) {
+      if (!/\[(401|403)\]/.test(String(e?.message))) throw e;
+      let status = 0;
+      let ids: string[] = [];
+      try {
+        const r = await fetch(`${base}/v3/accounts`, { headers: oandaHeaders(c) });
+        status = r.status;
+        if (r.ok) ids = ((await r.json()).accounts ?? []).map((a: any) => String(a.id));
+      } catch {
+        /* network — fall through */
+      }
+      throw new Error(`OANDA account check: ${classifyOanda401(accountId, status, ids)}`);
+    }
     const a = res.account ?? {};
     return {
       account_name: a.alias ?? null,
