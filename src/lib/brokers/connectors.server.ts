@@ -5,6 +5,7 @@
 // Adding a broker means adding one object to CONNECTORS — no change to the
 // AI, risk or execution logic.
 
+import { cleanCredential, classifyOanda401 } from "./oanda-auth";
 import type { SymbolSpec } from "@/lib/services/risk-engine";
 import { resolveConversion, type FxConversion, type FxQuoteFetcher } from "@/lib/services/fx";
 import { oandaFxFetcher, metaapiFxFetcher, bridgeFxFetcher, unavailableFxFetcher } from "@/lib/brokers/fx.server";
@@ -178,10 +179,10 @@ const metaapi: BrokerConnector = {
     const sym = c["symbol"] || symbol;
     const label = "MetaApi symbol specification";
     const spec = await req(
-      `${base}/users/current/accounts/${c["accountId"]}/symbols/${encodeURIComponent(sym)}/specification`,
+      `${base}/users/current/accounts/${cleanCredential(c["accountId"])}/symbols/${encodeURIComponent(sym)}/specification`,
       { label, headers: metaapiHeaders(c) },
     );
-    const info = await req(`${base}/users/current/accounts/${c["accountId"]}/account-information`, {
+    const info = await req(`${base}/users/current/accounts/${cleanCredential(c["accountId"])}/account-information`, {
       label: "MetaApi account information",
       headers: metaapiHeaders(c),
     });
@@ -213,7 +214,7 @@ const metaapi: BrokerConnector = {
   },
   async placeOrder(c, o) {
     const base = metaapiBase(c["region"] ?? "");
-    const res = await req(`${base}/users/current/accounts/${c["accountId"]}/trade`, {
+    const res = await req(`${base}/users/current/accounts/${cleanCredential(c["accountId"])}/trade`, {
       label: "MetaApi trade",
       method: "POST",
       headers: metaapiHeaders(c),
@@ -230,7 +231,7 @@ const metaapi: BrokerConnector = {
   },
   async positionExists(c, positionId) {
     const base = metaapiBase(c["region"] ?? "");
-    const positions = await req(`${base}/users/current/accounts/${c["accountId"]}/positions`, {
+    const positions = await req(`${base}/users/current/accounts/${cleanCredential(c["accountId"])}/positions`, {
       label: "MetaApi positions",
       headers: metaapiHeaders(c),
     });
@@ -239,7 +240,7 @@ const metaapi: BrokerConnector = {
   },
   async closePosition(c, positionId) {
     const base = metaapiBase(c["region"] ?? "");
-    await req(`${base}/users/current/accounts/${c["accountId"]}/trade`, {
+    await req(`${base}/users/current/accounts/${cleanCredential(c["accountId"])}/trade`, {
       label: "MetaApi close",
       method: "POST",
       headers: metaapiHeaders(c),
@@ -248,7 +249,7 @@ const metaapi: BrokerConnector = {
   },
   async modifyPosition(c, positionId, patch) {
     const base = metaapiBase(c["region"] ?? "");
-    await req(`${base}/users/current/accounts/${c["accountId"]}/trade`, {
+    await req(`${base}/users/current/accounts/${cleanCredential(c["accountId"])}/trade`, {
       label: "MetaApi modify",
       method: "POST",
       headers: metaapiHeaders(c),
@@ -270,7 +271,7 @@ const oandaBase = (env: string) =>
   env === "live" ? "https://api-fxtrade.oanda.com" : "https://api-fxpractice.oanda.com";
 
 const oandaHeaders = (c: Record<string, string>) => ({
-  Authorization: `Bearer ${c["token"] ?? ""}`,
+  Authorization: `Bearer ${cleanCredential(c["token"])}`,
   "Content-Type": "application/json",
 });
 
@@ -281,10 +282,26 @@ const oanda: BrokerConnector = {
   id: "oanda",
   async fetchAccount(c) {
     const base = oandaBase(c["environment"] ?? "practice");
-    const res = await req(`${base}/v3/accounts/${c["accountId"]}/summary`, {
-      label: "OANDA account summary",
-      headers: oandaHeaders(c),
-    });
+    const accountId = cleanCredential(c["accountId"]);
+    let res: any;
+    try {
+      res = await req(`${base}/v3/accounts/${accountId}/summary`, {
+        label: "OANDA account summary",
+        headers: oandaHeaders(c),
+      });
+    } catch (e: any) {
+      if (!/\[(401|403)\]/.test(String(e?.message))) throw e;
+      let status = 0;
+      let ids: string[] = [];
+      try {
+        const r = await fetch(`${base}/v3/accounts`, { headers: oandaHeaders(c) });
+        status = r.status;
+        if (r.ok) ids = ((await r.json()).accounts ?? []).map((a: any) => String(a.id));
+      } catch {
+        /* network — fall through */
+      }
+      throw new Error(`OANDA account check: ${classifyOanda401(accountId, status, ids)}`);
+    }
     const a = res.account ?? {};
     return {
       account_name: a.alias ?? null,
@@ -303,10 +320,10 @@ const oanda: BrokerConnector = {
     const label = "OANDA instrument specification";
     const instrument = c["symbol"] || "XAU_USD";
     const res = await req(
-      `${base}/v3/accounts/${c["accountId"]}/instruments?instruments=${encodeURIComponent(instrument)}`,
+      `${base}/v3/accounts/${cleanCredential(c["accountId"])}/instruments?instruments=${encodeURIComponent(instrument)}`,
       { label, headers: oandaHeaders(c) },
     );
-    const summary = await req(`${base}/v3/accounts/${c["accountId"]}/summary`, {
+    const summary = await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/summary`, {
       label: "OANDA account summary",
       headers: oandaHeaders(c),
     });
@@ -352,7 +369,7 @@ const oanda: BrokerConnector = {
     const base = oandaBase(c["environment"] ?? "practice");
     // OANDA sizes gold in ounces: 1 lot = OANDA_UNITS_PER_LOT oz.
     const units = Math.round(o.volume * OANDA_UNITS_PER_LOT) * (o.direction === "BUY" ? 1 : -1);
-    const res = await req(`${base}/v3/accounts/${c["accountId"]}/orders`, {
+    const res = await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/orders`, {
       label: "OANDA order",
       method: "POST",
       headers: oandaHeaders(c),
@@ -391,7 +408,7 @@ const oanda: BrokerConnector = {
   },
   async positionExists(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");
-    const res = await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}`, {
+    const res = await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/trades/${positionId}`, {
       label: "OANDA trade state",
       headers: oandaHeaders(c),
     });
@@ -401,7 +418,7 @@ const oanda: BrokerConnector = {
   },
   async fetchTrade(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");
-    const res = await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}`, {
+    const res = await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/trades/${positionId}`, {
       label: "OANDA trade detail",
       headers: oandaHeaders(c),
     });
@@ -423,7 +440,7 @@ const oanda: BrokerConnector = {
 
   async closePosition(c, positionId) {
     const base = oandaBase(c["environment"] ?? "practice");
-    await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}/close`, {
+    await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/trades/${positionId}/close`, {
       label: "OANDA close",
       method: "PUT",
       headers: oandaHeaders(c),
@@ -432,7 +449,7 @@ const oanda: BrokerConnector = {
   },
   async modifyPosition(c, positionId, patch) {
     const base = oandaBase(c["environment"] ?? "practice");
-    await req(`${base}/v3/accounts/${c["accountId"]}/trades/${positionId}/orders`, {
+    await req(`${base}/v3/accounts/${cleanCredential(c["accountId"])}/trades/${positionId}/orders`, {
       label: "OANDA modify",
       method: "PUT",
       headers: oandaHeaders(c),
