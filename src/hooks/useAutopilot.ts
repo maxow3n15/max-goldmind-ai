@@ -279,12 +279,13 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
         tradingMode,
         challenge: { enforced: challengeEnforced, status: challengeStatus, profile: challengeProfile },
         calibration: (forensicsQuery.data as any)?.calibration ?? null,
+        brokerIsDemo: tradingMode === "live" ? defaultBroker?.account_type === "demo" : null,
         environmentTrackRecord,
         cycleId: cycleRef.current?.id ?? "cycle",
       }),
     [timeframe, analysis, confluence, macro, quant, structure, sessionReport, management, market.quote, market.status,
      settingsRow, snapshot.data, tradeRows, killSwitch, running, executor.connected, tradingMode,
-     challengeEnforced, challengeStatus, challengeProfile, forensicsQuery.data, environmentTrackRecord],
+     challengeEnforced, challengeStatus, challengeProfile, forensicsQuery.data, environmentTrackRecord, defaultBroker],
   );
 
   const { account, adaptive, composite, safety, riskScore } = decision;

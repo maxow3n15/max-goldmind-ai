@@ -117,6 +117,19 @@ export async function placeLiveOrderCore(supabase: any, userId: string, data: Li
   const permission = getExecutionPermission(resolved.env, settings);
   if (!permission.allowed) return fail(permission.reason!, "ADMIN_LOCKED");
 
+  // Confidence gate: real money always 88%; demo may use the configured demo floor.
+  if (data.confidence != null) {
+    const { effectiveConfidenceFloor } = await import("@/lib/services/confidence-floor");
+    const floor = effectiveConfidenceFloor({
+      tradingMode: "live",
+      brokerIsDemo: resolved.isDemo === true,
+      demoFloor: settings?.demo_confidence_floor,
+    });
+    if (Number(data.confidence) < floor) {
+      return fail(`Confidence ${Number(data.confidence).toFixed(0)}% is below the ${floor}% floor.`);
+    }
+  }
+
   // --- 3. Account protection (kill switch, open trades, authorisation) ---
   const { checkAccountProtection } = await import("@/lib/trades.server");
   const guard = await checkAccountProtection(supabase, userId, "live", resolved.env);

@@ -67,6 +67,7 @@ export const openPaperTrade = createServerFn({ method: "POST" })
         confidence: data.confidence ?? null,
       },
       guard.settings,
+      { tradingMode: "paper", brokerIsDemo: null },
     );
     if (!revalidation.ok) throw new Error(`Execution refused — ${revalidation.reason}`);
 
