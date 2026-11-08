@@ -5,6 +5,7 @@
 // Adding a broker means adding one object to CONNECTORS — no change to the
 // AI, risk or execution logic.
 
+import { cleanCredential, classifyOanda401 } from "./oanda-auth";
 import type { SymbolSpec } from "@/lib/services/risk-engine";
 import { resolveConversion, type FxConversion, type FxQuoteFetcher } from "@/lib/services/fx";
 import { oandaFxFetcher, metaapiFxFetcher, bridgeFxFetcher, unavailableFxFetcher } from "@/lib/brokers/fx.server";
