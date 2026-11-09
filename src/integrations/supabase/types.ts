@@ -435,6 +435,7 @@ export type Database = {
           price: number | null
           reasoning: Json
           spread: number | null
+          study_id: string | null
           symbol: string
           technical_score: number | null
           timeframe: string
@@ -457,6 +458,7 @@ export type Database = {
           price?: number | null
           reasoning?: Json
           spread?: number | null
+          study_id?: string | null
           symbol?: string
           technical_score?: number | null
           timeframe: string
@@ -479,6 +481,7 @@ export type Database = {
           price?: number | null
           reasoning?: Json
           spread?: number | null
+          study_id?: string | null
           symbol?: string
           technical_score?: number | null
           timeframe?: string
@@ -515,6 +518,39 @@ export type Database = {
           last_beat_at?: string
           status?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      forward_studies: {
+        Row: {
+          broker_connection_id: string
+          created_at: string
+          ended_at: string | null
+          floor: number
+          id: string
+          started_at: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          broker_connection_id: string
+          created_at?: string
+          ended_at?: string | null
+          floor?: number
+          id?: string
+          started_at?: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          broker_connection_id?: string
+          created_at?: string
+          ended_at?: string | null
+          floor?: number
+          id?: string
+          started_at?: string
+          status?: string
           user_id?: string
         }
         Relationships: []
@@ -616,6 +652,7 @@ export type Database = {
           source: string
           status: string
           stop_loss: number
+          study_id: string | null
           symbol: string
           take_profit_1: number | null
           take_profit_2: number | null
@@ -650,6 +687,7 @@ export type Database = {
           source?: string
           status?: string
           stop_loss: number
+          study_id?: string | null
           symbol?: string
           take_profit_1?: number | null
           take_profit_2?: number | null
@@ -684,6 +722,7 @@ export type Database = {
           source?: string
           status?: string
           stop_loss?: number
+          study_id?: string | null
           symbol?: string
           take_profit_1?: number | null
           take_profit_2?: number | null
