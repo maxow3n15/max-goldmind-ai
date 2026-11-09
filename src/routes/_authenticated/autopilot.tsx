@@ -7,6 +7,7 @@ import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel"
 import { ManualOrderTicket } from "@/components/ManualOrderTicket";
 import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
 import { ManualCyclePanel } from "@/components/autopilot/ManualCyclePanel";
+import { DemoFloorPanel } from "@/components/autopilot/DemoFloorPanel";
 
 
 import { fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
@@ -113,6 +114,7 @@ function Autopilot() {
       {/* Authoritative, server-derived execution & arming state */}
       <ExecutionStatePanel />
 
+      <DemoFloorPanel />
       <ManualCyclePanel />
 
       {/* Manual order ticket — user-initiated entries, managed like any other */}
