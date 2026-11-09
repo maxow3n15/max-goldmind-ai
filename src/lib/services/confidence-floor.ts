@@ -29,6 +29,7 @@ export function effectiveConfidenceFloor(i: ConfidenceFloorInput): number {
   // Real money (or anything we cannot prove is demo): the live gate, always.
   if (i.tradingMode === "live" && i.brokerIsDemo !== true) return CONFIDENCE_GATES.FINAL;
 
+  if (i.demoFloor === null || i.demoFloor === undefined) return CONFIDENCE_GATES.FINAL;
   const raw = Number(i.demoFloor);
   if (!Number.isFinite(raw)) return CONFIDENCE_GATES.FINAL;
   // The demo floor may lower the gate for forward testing but never raise it

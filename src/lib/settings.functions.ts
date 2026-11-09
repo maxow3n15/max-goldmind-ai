@@ -113,3 +113,18 @@ export const setAutoExecute = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+
+const DemoFloorInput = z.object({ demo_confidence_floor: z.number().int().min(50).max(88).nullable() });
+
+/** Demo/paper confidence floor. Real-money live stays hard-locked at 88% regardless. */
+export const setDemoConfidenceFloor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => DemoFloorInput.parse(d))
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("user_settings")
+      .update({ demo_confidence_floor: data.demo_confidence_floor, updated_at: new Date().toISOString() })
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true as const };
+  });
