@@ -8,6 +8,7 @@ import { ManualOrderTicket } from "@/components/ManualOrderTicket";
 import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
 import { ManualCyclePanel } from "@/components/autopilot/ManualCyclePanel";
 import { DemoFloorPanel } from "@/components/autopilot/DemoFloorPanel";
+import { Term } from "@/components/Term";
 
 
 import { fmtMoney, fmtNum, fmtPct, fmtUsd } from "@/lib/format";
@@ -165,7 +166,7 @@ function Autopilot() {
                 {b.passed
                   ? <CheckCircle2 className="h-3 w-3 shrink-0 text-[color:var(--success)]" />
                   : <XCircle className="h-3 w-3 shrink-0 text-muted-foreground/60" />}
-                <span className={cn("truncate", !b.passed && "text-muted-foreground/70")}>{b.label}</span>
+                <span className={cn("min-w-0 truncate", !b.passed && "text-muted-foreground/70")}><Term label={b.label} /></span>
               </div>
             )) : <span className="text-muted-foreground text-xs col-span-2">Waiting for analysis…</span>}
           </div>
@@ -173,7 +174,7 @@ function Autopilot() {
 
         {/* Setup panel */}
         <div className="glass-panel rounded-2xl p-5 flex flex-col">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
             <div>
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Current setup</div>
               <div className="font-display text-lg font-semibold">AI trade plan</div>

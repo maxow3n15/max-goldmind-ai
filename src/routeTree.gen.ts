@@ -21,6 +21,7 @@ import { Route as AuthenticatedBrokerConnectionsRouteImport } from './routes/_au
 import { Route as AuthenticatedChallengeRouteImport } from './routes/_authenticated/challenge'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedDiagnosticsRouteImport } from './routes/_authenticated/diagnostics'
+import { Route as AuthenticatedForwardStudyRouteImport } from './routes/_authenticated/forward-study'
 import { Route as AuthenticatedIntelligenceRouteImport } from './routes/_authenticated/intelligence'
 import { Route as AuthenticatedJournalRouteImport } from './routes/_authenticated/journal'
 import { Route as AuthenticatedMacroRouteImport } from './routes/_authenticated/macro'
@@ -93,6 +94,12 @@ const AuthenticatedDiagnosticsRoute =
     path: '/diagnostics',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedForwardStudyRoute =
+  AuthenticatedForwardStudyRouteImport.update({
+    id: '/forward-study',
+    path: '/forward-study',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedIntelligenceRoute =
   AuthenticatedIntelligenceRouteImport.update({
     id: '/intelligence',
@@ -153,6 +160,7 @@ export interface FileRoutesByFullPath {
   '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/forward-study': typeof AuthenticatedForwardStudyRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
@@ -175,6 +183,7 @@ export interface FileRoutesByTo {
   '/challenge': typeof AuthenticatedChallengeRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/forward-study': typeof AuthenticatedForwardStudyRoute
   '/intelligence': typeof AuthenticatedIntelligenceRoute
   '/journal': typeof AuthenticatedJournalRoute
   '/macro': typeof AuthenticatedMacroRoute
@@ -199,6 +208,7 @@ export interface FileRoutesById {
   '/_authenticated/challenge': typeof AuthenticatedChallengeRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/diagnostics': typeof AuthenticatedDiagnosticsRoute
+  '/_authenticated/forward-study': typeof AuthenticatedForwardStudyRoute
   '/_authenticated/intelligence': typeof AuthenticatedIntelligenceRoute
   '/_authenticated/journal': typeof AuthenticatedJournalRoute
   '/_authenticated/macro': typeof AuthenticatedMacroRoute
@@ -223,6 +233,7 @@ export interface FileRouteTypes {
     | '/challenge'
     | '/dashboard'
     | '/diagnostics'
+    | '/forward-study'
     | '/intelligence'
     | '/journal'
     | '/macro'
@@ -245,6 +256,7 @@ export interface FileRouteTypes {
     | '/challenge'
     | '/dashboard'
     | '/diagnostics'
+    | '/forward-study'
     | '/intelligence'
     | '/journal'
     | '/macro'
@@ -268,6 +280,7 @@ export interface FileRouteTypes {
     | '/_authenticated/challenge'
     | '/_authenticated/dashboard'
     | '/_authenticated/diagnostics'
+    | '/_authenticated/forward-study'
     | '/_authenticated/intelligence'
     | '/_authenticated/journal'
     | '/_authenticated/macro'
@@ -375,6 +388,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDiagnosticsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/forward-study': {
+      id: '/_authenticated/forward-study'
+      path: '/forward-study'
+      fullPath: '/forward-study'
+      preLoaderRoute: typeof AuthenticatedForwardStudyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/intelligence': {
       id: '/_authenticated/intelligence'
       path: '/intelligence'
@@ -450,6 +470,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedChallengeRoute: typeof AuthenticatedChallengeRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedDiagnosticsRoute: typeof AuthenticatedDiagnosticsRoute
+  AuthenticatedForwardStudyRoute: typeof AuthenticatedForwardStudyRoute
   AuthenticatedIntelligenceRoute: typeof AuthenticatedIntelligenceRoute
   AuthenticatedJournalRoute: typeof AuthenticatedJournalRoute
   AuthenticatedMacroRoute: typeof AuthenticatedMacroRoute
@@ -467,6 +488,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedChallengeRoute: AuthenticatedChallengeRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedDiagnosticsRoute: AuthenticatedDiagnosticsRoute,
+  AuthenticatedForwardStudyRoute: AuthenticatedForwardStudyRoute,
   AuthenticatedIntelligenceRoute: AuthenticatedIntelligenceRoute,
   AuthenticatedJournalRoute: AuthenticatedJournalRoute,
   AuthenticatedMacroRoute: AuthenticatedMacroRoute,

@@ -1,4 +1,11 @@
 # Roadmap
+- [ ] Finish the approved interface and forward-study continuation
+  - [ ] Plain-English ICT tooltips
+  - [ ] Shared motion and mobile navigation/overflow polish
+  - [ ] Custom 404 and analytics planned-risk reference
+  - [ ] Permanent study page with full paginated decisions/results
+  - [ ] Safe study controls, scheduler/account pinning, execution rechecks and database regression verification
+  - [ ] Run demo forward study (blocked: renewed OANDA practice authorization and scheduler republish; no orders without confirmation)
 - [x] Sweep confidence floors (88/76/74/70/66/60/58) on 60d 15m
 - [x] Pull 8 years of candles (OANDA: 4H 12k, 1H 47k, 30m 94k bars, 2018-11 → 2026-11) and rerun floor test
 - Finding: 1H @ 60% floor = 69 trades, 57% IS win, +0.10R IS, +1.62R OOS (6 trades) — promising but OOS sample tiny; live gate unchanged at 88%

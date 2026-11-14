@@ -23,9 +23,11 @@ export interface ConfidenceFloorInput {
   brokerIsDemo: boolean | null;
   /** The user's configured demo floor (user_settings.demo_confidence_floor). */
   demoFloor: number | null | undefined;
+  studyOpen?: boolean;
 }
 
 export function effectiveConfidenceFloor(i: ConfidenceFloorInput): number {
+  if (i.studyOpen) return CONFIDENCE_GATES.FINAL;
   // Real money (or anything we cannot prove is demo): the live gate, always.
   if (i.tradingMode === "live" && i.brokerIsDemo !== true) return CONFIDENCE_GATES.FINAL;
 

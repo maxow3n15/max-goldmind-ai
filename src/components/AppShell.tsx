@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { setRememberMe } from "@/lib/session-persistence";
+import { Button } from "@/components/ui/button";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -14,6 +15,7 @@ const NAV = [
 
   { to: "/risk", label: "Risk Engine", icon: ShieldCheck },
   { to: "/backtesting", label: "Backtesting", icon: FlaskConical },
+  { to: "/forward-study", label: "Forward study", icon: FlaskConical },
   { to: "/broker-connections", label: "Brokers", icon: Link2 },
 
   { to: "/trading-mode", label: "Trading Mode", icon: ToggleRight },
@@ -69,31 +71,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="p-3 border-t border-border/60">
-          <button onClick={signOut} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+          <Button variant="ghost" onClick={signOut} className="w-full justify-start gap-3 text-muted-foreground">
             <LogOut className="h-4 w-4" /> Sign out
-          </button>
+          </Button>
         </div>
       </aside>
 
       {/* Mobile top bar */}
-      <div className="md:hidden flex items-center justify-between px-4 py-3 border-b border-border/60 glass-panel rounded-none">
-        <div className="flex items-center gap-2">
+      <div className="md:hidden grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 border-b border-border/60 glass-panel rounded-none">
+        <div className="flex min-w-0 items-center gap-2">
           <div className="h-8 w-8 rounded-md flex items-center justify-center" style={{ background: "var(--gradient-gold)" }}>
             <Zap className="h-4 w-4 text-[color:var(--gold-foreground)]" />
           </div>
           <div className="font-display font-semibold">GoldMind<span className="gold-text"> AI</span></div>
         </div>
-        <button onClick={signOut} className="p-2 text-muted-foreground"><LogOut className="h-4 w-4" /></button>
+        <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out" className="shrink-0 text-muted-foreground"><LogOut /></Button>
       </div>
 
-      <main className="flex-1 min-w-0 pb-24 md:pb-8">{children}</main>
+      <main className="platform-main flex-1 min-w-0 pb-28 md:pb-8">{children}</main>
 
       {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel rounded-none border-t border-border/60 flex justify-around py-2">
+      <nav aria-label="Mobile navigation" className="mobile-navigation md:hidden fixed bottom-0 left-0 right-0 z-40 glass-panel rounded-none border-t border-border/60 flex overflow-x-auto py-2">
         {NAV.map(({ to, label, icon: Icon }) => {
           const active = location.pathname === to;
           return (
-            <Link key={to} to={to} className={cn("flex flex-col items-center gap-0.5 px-2 py-1 text-[10px]",
+            <Link key={to} to={to} aria-current={active ? "page" : undefined} className={cn("flex w-20 shrink-0 flex-col items-center gap-1 px-1 py-1 text-[10px] whitespace-nowrap",
               active ? "text-[color:var(--gold)]" : "text-muted-foreground")}>
               <Icon className="h-5 w-5" />
               {label}

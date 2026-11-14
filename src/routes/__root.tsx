@@ -15,23 +15,25 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { getDiagnostics } from "@/lib/platform-context";
+import { Button } from "@/components/ui/button";
+import { useSupabaseSession } from "@/hooks/useSupabaseSession";
+import { Compass, LayoutDashboard, Bot, ArrowRight } from "lucide-react";
 
 function NotFoundComponent() {
+  const { isAuthenticated } = useSupabaseSession();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold gold-text">404</h1>
-        <h2 className="mt-4 text-xl font-semibold">Page not found</h2>
+        <Compass className="mx-auto h-16 w-16 text-gold mb-6" aria-hidden="true" />
+        <p className="font-mono text-sm text-gold">GOLDMIND AI · 404</p>
+        <h1 className="mt-4 text-4xl font-semibold">Off the chart</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          This route doesn't exist in the platform.
+          This page isn’t on the map. Your trading workspace is still where you left it.
         </p>
-        <div className="mt-6">
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:opacity-90"
-          >
-            Go home
-          </Link>
+        <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <Button asChild><Link to="/dashboard"><LayoutDashboard /> Dashboard</Link></Button>
+          <Button variant="outline" asChild><Link to="/autopilot"><Bot /> Autopilot</Link></Button>
+          {!isAuthenticated && <Button variant="ghost" asChild><Link to="/auth">Sign in <ArrowRight /></Link></Button>}
         </div>
       </div>
     </div>
@@ -110,8 +112,6 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "GoldMind AI — Institutional XAUUSD Trading Intelligence" },
       { name: "twitter:description", content: "AI-powered gold market analysis using Smart Money Concepts. Real-time XAUUSD setups, explained decisions, risk-managed paper trading." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/241f7b8d-c132-4522-bd80-491aaf9abc29/id-preview-74fe1276--e6af7af9-9ab4-44c0-b52b-fe50f301646e.lovable.app-1785370739411.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/241f7b8d-c132-4522-bd80-491aaf9abc29/id-preview-74fe1276--e6af7af9-9ab4-44c0-b52b-fe50f301646e.lovable.app-1785370739411.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

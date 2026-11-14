@@ -118,7 +118,7 @@
       radial-gradient(900px 500px at 100% 0%, oklch(0.55 0.08 85 / 0.05), transparent 60%);
     background-attachment: fixed;
   }
-  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
+  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: 0; }
   .font-mono { font-family: var(--font-mono); }
 }
 
@@ -157,4 +157,26 @@
 @utility no-scrollbar {
   scrollbar-width: none;
   &::-webkit-scrollbar { display: none; }
+}
+
+.mobile-navigation { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+.platform-main { overflow-wrap: anywhere; }
+.platform-main .overflow-x-auto { max-width: 100%; }
+.platform-main .overflow-x-auto table { min-width: 36rem; }
+.platform-main .recharts-responsive-container { min-width: 0; }
+button, a, .glass-panel { transition: transform 160ms ease, border-color 160ms ease, filter 160ms ease; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  button:not(:disabled):hover { filter: brightness(1.08); }
+  button:not(:disabled):active { transform: translateY(1px); }
+  .platform-main .glass-panel:hover { border-color: var(--gold-muted); }
+  nav a:hover { text-decoration: underline; text-decoration-color: var(--gold); text-underline-offset: 4px; }
+}
+@media (max-width: 639px) {
+  .platform-main header { min-width: 0; }
+  .platform-main header > div { min-width: 0; }
+  .platform-main .glass-panel { min-width: 0; }
+  .platform-main .glass-panel > .flex.items-center.justify-between { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
 }

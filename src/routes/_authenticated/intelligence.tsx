@@ -10,6 +10,7 @@ import { getActiveZones } from "@/lib/zones.functions";
 import { REGIME_LABEL } from "@/lib/services/environment";
 import { TIER_LABEL } from "@/lib/services/adaptive";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
+import { Term } from "@/components/Term";
 
 export const Route = createFileRoute("/_authenticated/intelligence")({
   component: IntelligencePage,
@@ -105,7 +106,7 @@ function IntelligencePage() {
                   <tr key={i} className="border-b border-border/20 last:border-0">
                     <td className="py-1.5 pr-3">
                       <span className="flex items-center gap-1.5">
-                        {z.kind}
+                        <Term label={z.kind} />
                         {inside && (
                           <span
                             className="relative inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium"

@@ -4,15 +4,16 @@ import { Layers } from "lucide-react";
 import { listConfidenceCeiling, type ConfidenceCeilingCycle } from "@/lib/decision-log.functions";
 import { FACTOR_LABELS, type FactorKey } from "@/lib/services/confidence-engine";
 import { cn } from "@/lib/utils";
+import { Term } from "@/components/Term";
 
 const FACTOR_ORDER = Object.keys(FACTOR_LABELS) as FactorKey[];
 
 type Verdict = "pass" | "partial" | "fail" | "unavailable" | "missing";
 
 const CELL_TONE: Record<Verdict, string> = {
-  pass: "bg-[color:var(--gold)]/80 text-black",
+  pass: "bg-gold/80 text-gold-foreground",
   partial: "bg-muted text-muted-foreground",
-  fail: "bg-red-500/80 text-white",
+  fail: "bg-destructive/80 text-destructive-foreground",
   unavailable: "bg-muted/40 text-muted-foreground/60",
   missing: "bg-transparent text-muted-foreground/40",
 };
@@ -117,7 +118,7 @@ export function ConfidenceCeilingPanel() {
                       title={FACTOR_LABELS[key]}
                     >
                       <div className="rotate-180 [writing-mode:vertical-rl] text-[10px] uppercase tracking-wider text-muted-foreground/70 whitespace-nowrap h-24">
-                        {FACTOR_LABELS[key]}
+                        <Term label={FACTOR_LABELS[key]} />
                       </div>
                     </th>
                   ))}

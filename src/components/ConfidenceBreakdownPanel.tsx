@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { Activity, BarChart3, Gauge, Layers, LineChart, Newspaper, Radar, ShieldCheck, Waves, Wrench } from "lucide-react";
 import type { CompositeConfidence } from "@/lib/services/macro.types";
 import type { ManagementRecommendation } from "@/lib/services/quant.types";
+import { Term } from "@/components/Term";
 
 const ICONS: Record<string, typeof Activity> = {
   technical: BarChart3,
@@ -62,7 +63,7 @@ export function ConfidenceBreakdownPanel({
               <div key={r.key} className="space-y-1">
                 <div className="flex items-center gap-2 text-xs">
                   <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  <span className="flex-1 truncate">{r.label}</span>
+                  <span className="flex-1 min-w-0 truncate"><Term label={r.label} /></span>
                   <span className="font-mono text-[11px] text-muted-foreground">
                     {Math.round(r.weight * 100)}%w
                   </span>

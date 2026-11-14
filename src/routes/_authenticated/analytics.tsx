@@ -3,7 +3,8 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import {
   ResponsiveContainer,
-  ScatterChart,
+  ComposedChart,
+  Line,
   Scatter,
   XAxis,
   YAxis,
@@ -15,6 +16,7 @@ import { listTrades, getAccountSnapshot } from "@/lib/trades.functions";
 import { fmtNum, fmtPct, fmtUsd } from "@/lib/format";
 import { StatCard } from "@/components/StatCard";
 import { ForensicsPanels } from "@/components/ForensicsPanels";
+import { tradeReturnR } from "@/lib/trade-result";
 
 export const Route = createFileRoute("/_authenticated/analytics")({
   component: Analytics,
@@ -117,6 +119,7 @@ interface HoldingPoint {
   setup: string;
   session: string;
   win: boolean;
+  plannedRisk: number;
 }
 
 function HoldingTimeChart({ closed }: { closed: any[] }) {
@@ -124,20 +127,8 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
     .map((t: any) => {
       const opened = t.opened_at ? new Date(t.opened_at).getTime() : null;
       const closedAt = t.closed_at ? new Date(t.closed_at).getTime() : null;
-      const entry = Number(t.entry_price);
-      const exit = Number(t.exit_price);
-      // Break-even management moves stop_loss to entry, so prefer the
-      // immutable initial stop; fall back to the live stop, then derive
-      // the original risk from TP1 distance and the planned R:R.
-      let risk = Math.abs(entry - Number(t.initial_stop_loss));
-      if (!risk) risk = Math.abs(entry - Number(t.stop_loss));
-      if (!risk) {
-        const tp1 = Number(t.take_profit_1);
-        const rr = Number(t.risk_reward);
-        if (Number.isFinite(tp1) && rr > 0) risk = Math.abs(tp1 - entry) / rr;
-      }
-      if (opened == null || closedAt == null || !risk || !Number.isFinite(exit)) return null;
-      const r = (t.direction === "BUY" ? exit - entry : entry - exit) / risk;
+      const r = tradeReturnR(t);
+      if (opened == null || closedAt == null || !Number.isFinite(opened) || !Number.isFinite(closedAt) || closedAt < opened || r == null) return null;
       const pnl = Number(t.pnl);
       return {
         durationMin: Math.round(((closedAt - opened) / 60000) * 10) / 10,
@@ -146,9 +137,11 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
         setup: t.ai_analysis?.setup_model?.type?.replaceAll("_", " ").toLowerCase() ?? t.ai_analysis?.bias ?? t.reason_entry?.slice(0, 40) ?? "—",
         session: t.session ?? "Unknown",
         win: pnl > 0,
+        plannedRisk: -1,
       } as HoldingPoint;
     })
-    .filter((p): p is HoldingPoint => p !== null);
+    .filter((p): p is HoldingPoint => p !== null)
+    .sort((a, b) => a.durationMin - b.durationMin);
 
   const winners = points.filter((p) => p.win);
   const losers = points.filter((p) => !p.win);
@@ -157,14 +150,14 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
     <div className="glass-panel rounded-2xl p-5">
       <h2 className="font-display text-lg font-semibold mb-1">Holding time vs result</h2>
       <p className="text-xs text-muted-foreground mb-4">
-        Each dot is a closed trade — how long it was held versus the R-multiple it returned.
+        Planned risk −1R · {points.filter((p) => p.r < -1).length} losses beyond planned risk
       </p>
       {points.length < 5 ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Not enough data yet.</p>
       ) : (
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
+            <ComposedChart data={points} margin={{ top: 8, right: 16, bottom: 8, left: 0 }}>
               <CartesianGrid stroke="var(--border)" strokeOpacity={0.4} />
               <XAxis
                 type="number"
@@ -183,6 +176,7 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
                 tickFormatter={(v) => `${v}R`}
               />
               <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeDasharray="4 4" strokeOpacity={0.7} />
+              <Line dataKey="plannedRisk" name="Planned risk" stroke="var(--warning)" strokeDasharray="6 4" dot={false} isAnimationActive={false} />
               <Tooltip
                 cursor={{ strokeDasharray: "3 3", stroke: "var(--muted-foreground)" }}
                 content={({ active, payload }) => {
@@ -192,6 +186,7 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
                     <div className="rounded-lg border border-border bg-background/95 px-3 py-2 text-xs shadow-lg">
                       <div className="font-medium capitalize">{p.setup}</div>
                       <div className="text-muted-foreground">{p.session} session · {p.durationMin >= 60 ? `${(p.durationMin / 60).toFixed(1)}h` : `${p.durationMin}m`} held</div>
+                      <div className="mt-1 text-warning">Risk: −1.00R · Return: {p.r >= 0 ? "+" : ""}{p.r.toFixed(2)}R{p.r < -1 ? " · Beyond planned risk" : ""}</div>
                       <div className={`font-mono mt-1 ${p.win ? "text-[color:var(--gold)]" : "text-[color:var(--destructive)]"}`}>
                         {p.r >= 0 ? "+" : ""}{p.r}R · {fmtUsd(p.pnl)}
                       </div>
@@ -199,9 +194,10 @@ function HoldingTimeChart({ closed }: { closed: any[] }) {
                   );
                 }}
               />
-              <Scatter name="Winners" data={winners} fill="var(--gold)" />
-              <Scatter name="Losers" data={losers} fill="var(--destructive)" />
-            </ScatterChart>
+              <Scatter name="Winners" data={winners} dataKey="r" fill="var(--gold)" />
+              <Scatter name="Losers" data={losers} dataKey="r" fill="var(--destructive)" />
+              <Scatter name="Beyond planned risk" data={points.filter((p) => p.r < -1)} dataKey="r" fill="var(--warning)" shape="diamond" />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
