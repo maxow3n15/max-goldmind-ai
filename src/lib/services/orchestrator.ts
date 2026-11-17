@@ -28,6 +28,8 @@ import type { StructureRead } from "./structure";
 import { computeComposite, sizeMultiplier } from "./scoring";
 import { effectiveConfidenceFloor } from "./confidence-floor";
 import { classifySetup, type SetupClassification } from "./setup-models";
+import { buildSwingCandidate, evaluateSwingPosition, SWING_POLICY } from './swing';
+import type { LiquidityLevel } from './structure';
 
 /* ------------------------------------------------------------------ */
 /* Account state derived from stored trades                            */
@@ -72,6 +74,7 @@ export function deriveAccountState(tradeRows: any[], snapshot: any | null, now?:
       take_profit_3: t.take_profit_3 != null ? Number(t.take_profit_3) : null,
       lot_size: Number(t.lot_size),
       opened_at: t.opened_at,
+      swing: t.ai_analysis?.swing ?? null,
     }));
 
   // Peak-to-trough drawdown over the realised equity curve.
@@ -160,6 +163,8 @@ export function evaluateKillSwitch(i: {
 /* ------------------------------------------------------------------ */
 
 export interface OrchestratorInput {
+  tradingStyle?: 'swing' | 'legacy';
+  liquidityLevels?: LiquidityLevel[];
   timeframe: string;
   session: string;
   analysis: any | null;
@@ -253,6 +258,14 @@ export interface OrchestratorDecision {
 
 export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision {
   const now = i.now ?? Date.now();
+  // Production automation is swing-only. Historical legacy replays opt out explicitly.
+  const swingEnabled = i.tradingStyle !== 'legacy' && i.researchConfidenceFloor == null;
+  const candidate = swingEnabled ? buildSwingCandidate(i.mtf ?? null, i.quote?.mid ?? null, i.liquidityLevels, now) : null;
+  if (swingEnabled) i = { ...i, timeframe: SWING_POLICY.entryTimeframe, analysis: {
+    ...(i.analysis ?? {}), setup: candidate?.setup ?? null,
+    bias: candidate?.setup?.direction === 'BUY' ? 'bullish' : candidate?.setup ? 'bearish' : 'neutral',
+    explanation: candidate?.explanation, swing: candidate?.metadata,
+  }, settings: { ...i.settings, preferred_session: '' } };
   const derived = deriveAccountState(i.trades, i.snapshot, now);
   const account: AccountState =
     i.researchConsecutiveLosses != null && Number.isFinite(Number(i.researchConsecutiveLosses))
@@ -307,12 +320,12 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     volatility: i.quant?.volatility ?? null,
     volume: i.quant?.volume ?? null,
     correlation: i.quant?.correlation ?? null,
-    session: i.sessionReport ?? null,
+    session: swingEnabled ? null : i.sessionReport ?? null,
     dataQuality,
     spread: i.quote?.spread ?? null,
     maxSpread: Number(s.max_spread ?? SAFETY_CONSTANTS.MAX_SPREAD) || SAFETY_CONSTANTS.MAX_SPREAD,
     minRr: Math.max(SAFETY_CONSTANTS.MIN_RR, Number(s.min_risk_reward ?? SAFETY_CONSTANTS.MIN_RR) || SAFETY_CONSTANTS.MIN_RR),
-    weights: i.confidenceWeights ?? undefined,
+    weights: i.confidenceWeights ?? (swingEnabled ? { htf_alignment: 25, structure: 20, liquidity: 5, entry_zone: 10, fvg_ob: 15, momentum: 5, smt: 0, news_macro: 5, risk_reward: 10, market_conditions: 5 } : undefined),
   });
 
   // The deterministic score replaces whatever number the model reported.
@@ -336,7 +349,8 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     riskScore,
     finalThreshold: adaptive.confidenceThreshold,
     gateFloor: confidenceFloor,
-    weights: (i.compositeWeights ?? undefined) as any,
+    weights: (i.compositeWeights ?? (swingEnabled ? { technical: 0.60, news: 0.15, sentiment: 0.05, risk: 0.10, volume: 0, volatility: 0.05, momentum: 0.05, session: 0, correlation: 0 } : undefined)) as any,
+    swingDemo: swingEnabled && (i.tradingMode === 'paper' || i.brokerIsDemo === true),
     volume: i.quant?.volume,
     volatility: i.quant?.volatility,
     momentum: i.quant?.momentum,
@@ -379,7 +393,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
   const setup = i.analysis?.setup ?? null;
 
   // Name the setup before considering it. An unnamed setup is not tradable.
-  const classification = classifySetup({
+  const classification = candidate?.classification ?? classifySetup({
     proposal: setup
       ? {
           direction: setup.direction,
@@ -428,6 +442,8 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
   if (!classification.tradable) {
     return { ...base, rejection: classification.reason ?? "Setup does not match any GoldMind model" };
   }
+  if (candidate?.metadata && i.trades.some(t => t.ai_analysis?.swing?.setupId === candidate.metadata?.setupId)) return { ...base, rejection: 'This swing setup has already been traded; wait for a new closed 1H confirmation' };
+  if (swingEnabled && account.openTrades.some(t => t.direction !== setup.direction)) return { ...base, rejection: 'Opposing exposure already open — no swing hedging' };
 
   if (adaptive.halted) {
     return { ...base, action: "halt", rejection: adaptive.reasons[0] ?? "Capital preservation lockdown" };
@@ -480,6 +496,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
 
     ai_analysis: {
       ...i.analysis,
+      swing: candidate?.metadata ?? null,
       macro: i.macro,
       composite,
       quant: i.quant,
@@ -518,7 +535,7 @@ export function runDecisionPipeline(i: OrchestratorInput): OrchestratorDecision 
     targets,
     balance,
     riskPctPerLeg,
-    cycleId: i.cycleId || (setupKey ?? "cycle"),
+    cycleId: candidate?.metadata ? `swing-${candidate.metadata.setupId}` : i.cycleId || (setupKey ?? "cycle"),
     now,
   });
 
@@ -557,12 +574,14 @@ export function planPositionActions(i: {
   price: number | null | undefined;
   atr?: number | null;
   management?: ManagementRecommendation | null;
+  fourHourStructure?: StructureRead | null;
+  now?: number;
 }): PositionActionPlan[] {
   const price = i.price;
   if (!price || !Number.isFinite(price) || i.openTrades.length === 0) return [];
   const out: PositionActionPlan[] = [];
   for (const trade of i.openTrades) {
-    const action = evaluatePosition({
+    const action = trade.swing ? evaluateSwingPosition(trade, price, i.fourHourStructure ?? null, i.now) : evaluatePosition({
       trade,
       price,
       atr: i.atr ?? null,

@@ -14,6 +14,8 @@ import { verdictDirection } from "./mtf";
 import type { StructureRead } from "./structure";
 
 export type SetupType =
+  | "SWING_4H_SWEEP_RETEST"
+  | "SWING_TREND_CONTINUATION"
   | "LIQUIDITY_SWEEP_REVERSAL"
   | "TREND_CONTINUATION"
   | "SESSION_REVERSAL"

@@ -14,7 +14,7 @@ const Ctx = createContext<AutopilotApi | null>(null);
  * The floating widget and the Autopilot page are two views of this one engine.
  */
 export function AutopilotProvider({ children }: { children: ReactNode }) {
-  const [timeframe, setTimeframe] = useState<string>("15");
+  const [timeframe, setTimeframe] = useState<string>("60");
   const engine = useAutopilot({ timeframe });
 
   return (

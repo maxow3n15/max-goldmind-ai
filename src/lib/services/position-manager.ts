@@ -32,6 +32,7 @@ export interface OpenTrade {
   take_profit_3: number | null;
   lot_size: number;
   opened_at: string;
+  swing?: import('./swing').SwingMetadata | null;
 }
 
 

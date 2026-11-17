@@ -46,6 +46,7 @@ const LABELS: Record<keyof typeof WEIGHTS, string> = {
 };
 
 interface Input {
+  swingDemo?: boolean;
   confluence: ConfluenceReport | null;
   analysis: any | null;
   macro: MacroReport | null;
@@ -103,7 +104,7 @@ export function directionalNewsScore(macro: MacroReport | null, direction?: "BUY
 export function computeComposite({
   confluence, analysis, macro, riskScore,
   volume, volatility, momentum, session, correlation, candleQuality,
-  finalThreshold, gateFloor, weights,
+  finalThreshold, gateFloor, weights, swingDemo,
 }: Input): CompositeConfidence {
   const floor = Number.isFinite(gateFloor as number) ? (gateFloor as number) : CONFIDENCE_GATES.FINAL;
   const W = resolveCompositeWeights(weights);
@@ -167,8 +168,8 @@ export function computeComposite({
 
   const gates = [
     { key: "final", label: `Final confidence ≥ ${gateFinal}%`, passed: final >= gateFinal, detail: gateFinal > floor ? `${final}% · bar raised from ${floor}% by capital preservation` : `${final}%` },
-    { key: "technical", label: `Technical ≥ ${CONFIDENCE_GATES.TECHNICAL}%`, passed: technical >= CONFIDENCE_GATES.TECHNICAL, detail: `${technical}%` },
-    { key: "news", label: `News / fundamental ≥ ${CONFIDENCE_GATES.NEWS}%`, passed: news >= CONFIDENCE_GATES.NEWS, detail: `${news}%` },
+    { key: "technical", label: `Technical ≥ ${swingDemo ? 75 : CONFIDENCE_GATES.TECHNICAL}%`, passed: technical >= (swingDemo ? 75 : CONFIDENCE_GATES.TECHNICAL), detail: `${technical}%` },
+    { key: "news", label: `News / fundamental ≥ ${swingDemo ? 60 : CONFIDENCE_GATES.NEWS}%`, passed: news >= (swingDemo ? 60 : CONFIDENCE_GATES.NEWS), detail: `${news}%` },
     { key: "rr", label: `Risk / reward ≥ 1:${CONFIDENCE_GATES.MIN_RR}`, passed: rr >= CONFIDENCE_GATES.MIN_RR, detail: rr ? `1:${rr.toFixed(2)}` : "no setup" },
     { key: "structure", label: "Market structure confirms direction", passed: !!analysis?.bias && !!direction && ((direction === "BUY" && analysis.bias === "bullish") || (direction === "SELL" && analysis.bias === "bearish")), detail: analysis?.bias ?? "unknown" },
     { key: "no_conflict", label: "No conflicting high-impact news", passed: !conflicting },

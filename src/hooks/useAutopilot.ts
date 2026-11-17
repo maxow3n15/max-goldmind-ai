@@ -235,8 +235,8 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
   // does; without it the timeframe-agreement gate can never pass.
   const structureFn = useServerFn(getMarketStructure);
   const structureQuery = useQuery({
-    queryKey: ["market-structure", timeframe],
-    queryFn: () => structureFn({ data: { timeframe } }),
+    queryKey: ["market-structure", timeframe, 'swing'],
+    queryFn: () => structureFn({ data: { timeframe: '60', profile: 'swing' } }),
     refetchInterval: 30_000,
     enabled: isAuthenticated,
     staleTime: 20_000,
@@ -264,6 +264,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
         confluence,
         mtf: structure?.mtf ?? null,
         entryStructure: structure?.entryStructure ?? null,
+        liquidityLevels: structure?.levels ?? [],
         macro,
         quant,
         sessionReport,
@@ -510,6 +511,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
       price: market.quote?.mid,
       atr: quant?.volatility?.atr ?? null,
       management,
+      fourHourStructure: structure?.mtf?.timeframes.find((r: any) => r.timeframe === '240')?.structure ?? null,
     });
     for (const { trade: t, action, dedupeKey } of actions) {
       if (managedRef.current.has(dedupeKey)) continue;
@@ -532,7 +534,7 @@ export function useAutopilot({ timeframe, analysisIntervalMs = 60_000 }: Options
           .catch((e) => log("error", "Stop update failed", e?.message));
       }
     }
-  }, [market.quote?.mid, openTrades, executor, log, qc, quant?.volatility?.atr, management]);
+  }, [market.quote?.mid, openTrades, executor, log, qc, quant?.volatility?.atr, management, structure]);
 
   const start = useCallback(() => {
     if (killSwitch.active) {

@@ -95,7 +95,7 @@ export function createLiveExecutionEngine(fns: {
           reason_entry: plan.reason,
           ai_analysis: plan.ai_analysis,
           environment: plan.environment ?? null,
-
+          client_order_id: plan.client_order_id,
         },
       });
       if (!res?.ok) throw new Error(res?.reason ?? "Broker rejected the order");

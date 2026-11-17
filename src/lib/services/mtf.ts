@@ -122,8 +122,9 @@ function weightedGroup(reads: TimeframeRead[], keys: TimeframeKey[]) {
  */
 export function buildMultiTimeframeReport(
   candlesByTimeframe: Partial<Record<TimeframeKey, Candle[]>>,
+  profile: 'legacy' | 'swing' = 'legacy',
 ): MultiTimeframeReport {
-  const keys = Object.keys(TIMEFRAME_WEIGHTS) as TimeframeKey[];
+  const keys: TimeframeKey[] = profile === 'swing' ? ['D', '240', '60'] : Object.keys(TIMEFRAME_WEIGHTS) as TimeframeKey[];
   const missing: TimeframeKey[] = [];
 
   const timeframes: TimeframeRead[] = keys.map((tf) => {
@@ -159,13 +160,13 @@ export function buildMultiTimeframeReport(
     generated_at: Date.now(),
     verdict: verdictFor(score),
     score,
-    htf: weightedGroup(timeframes, HTF),
-    mtf: weightedGroup(timeframes, MTF),
-    ltf: weightedGroup(timeframes, LTF),
+    htf: weightedGroup(timeframes, profile === 'swing' ? ['D'] : HTF),
+    mtf: weightedGroup(timeframes, profile === 'swing' ? ['240'] : MTF),
+    ltf: weightedGroup(timeframes, profile === 'swing' ? ['60'] : LTF),
     alignment,
     timeframes,
     missing,
-    degraded: available.length < 4,
+    degraded: profile === 'swing' ? missing.length > 0 : available.length < 4,
   };
 }
 

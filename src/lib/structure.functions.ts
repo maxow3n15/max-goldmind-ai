@@ -12,10 +12,10 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
  */
 export const getMarketStructure = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ timeframe: z.string().max(8).default("15") }).parse(d ?? {}))
+  .inputValidator((d: unknown) => z.object({ timeframe: z.string().max(8).default("15"), profile: z.enum(['legacy', 'swing']).default('legacy') }).parse(d ?? {}))
   .handler(async ({ data }) => {
     const { buildMarketStructure } = await import("@/lib/mtf.server");
-    const bundle = await buildMarketStructure(data.timeframe);
+    const bundle = await buildMarketStructure(data.timeframe, data.profile);
     return {
       generated_at: bundle.generated_at,
       mtf: bundle.mtf,

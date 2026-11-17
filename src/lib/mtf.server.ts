@@ -36,14 +36,17 @@ export interface MarketStructureBundle {
 let cache: { at: number; timeframe: string; value: MarketStructureBundle } | null = null;
 const CACHE_MS = 30_000;
 
-export async function buildMarketStructure(timeframe: string): Promise<MarketStructureBundle> {
-  if (cache && cache.timeframe === timeframe && Date.now() - cache.at < CACHE_MS) return cache.value;
+export async function buildMarketStructure(timeframe: string, profile: 'legacy' | 'swing' = 'legacy'): Promise<MarketStructureBundle> {
+  const cacheKey = `${profile}:${timeframe}`;
+  const required: TimeframeKey[] = profile === 'swing' ? ['D', '240', '60'] : TF_KEYS;
+  if (cache && cache.timeframe === cacheKey && Date.now() - cache.at < CACHE_MS) return cache.value;
 
   const entries = await Promise.all(
-    TF_KEYS.map(async (tf) => {
+    required.map(async (tf) => {
       const { interval, range, ttlMs } = intervalFor(tf);
       const candles = await fetchCandles(GOLD_SYMBOL, interval, range, ttlMs).catch(() => [] as Candle[]);
-      return [tf, candles] as const;
+      const duration = tf === 'D' ? 86400_000 : Number(tf) * 60_000;
+      return [tf, profile === 'swing' ? candles.filter(c => c.t + duration <= Date.now()) : candles] as const;
     }),
   );
 
@@ -51,17 +54,17 @@ export async function buildMarketStructure(timeframe: string): Promise<MarketStr
 
   // Grade every series before a single structural conclusion is drawn.
   const byTimeframe: Record<string, IntegrityReport> = {};
-  for (const tf of TF_KEYS) {
+  for (const tf of required) {
     byTimeframe[tf] = validateSeries(byTf[tf] ?? []).report;
   }
-  const integrityStatus = worstStatus(TF_KEYS.map((tf) => byTimeframe[tf].status));
-  const integrityIssues = TF_KEYS.flatMap((tf) =>
+  const integrityStatus = worstStatus(required.map((tf) => byTimeframe[tf].status));
+  const integrityIssues = required.flatMap((tf) =>
     byTimeframe[tf].issues.map((m) => `${tf}: ${m}`),
   ).slice(0, 12);
 
-  const mtf = buildMultiTimeframeReport(byTf);
+  const mtf = buildMultiTimeframeReport(byTf, profile);
 
-  const tfKey = (TF_KEYS.includes(timeframe as TimeframeKey) ? timeframe : "15") as TimeframeKey;
+  const tfKey = (profile === 'swing' ? '60' : TF_KEYS.includes(timeframe as TimeframeKey) ? timeframe : "15") as TimeframeKey;
   const entryCandles = byTf[tfKey] ?? [];
   const entryStructure = readStructure(entryCandles);
 
@@ -87,7 +90,7 @@ export async function buildMarketStructure(timeframe: string): Promise<MarketStr
     integrity: { status: integrityStatus, byTimeframe, issues: integrityIssues },
   };
 
-  cache = { at: Date.now(), timeframe, value };
+  cache = { at: Date.now(), timeframe: cacheKey, value };
   return value;
 }
 

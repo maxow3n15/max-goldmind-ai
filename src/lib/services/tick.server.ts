@@ -101,7 +101,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
 
   for (const settings of enabled) {
     const userId = settings.user_id as string;
-    const timeframe = String(settings.preferred_timeframe ?? "15");
+    const timeframe = '60';
     const cycleId = `srv-${userId.slice(0, 8)}-${Math.floor(Date.now() / 60_000)}`;
 
     try {
@@ -118,7 +118,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
       let structure = structureCache.get(timeframe);
       if (structure === undefined) {
         const { buildMarketStructure } = await import("@/lib/mtf.server");
-        try { structure = await buildMarketStructure(timeframe); }
+        try { structure = await buildMarketStructure(timeframe, 'swing'); }
         catch { structure = null; }
         structureCache.set(timeframe, structure);
       }
@@ -301,10 +301,12 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         confluence: null,
         mtf: structure?.mtf ?? null,
         entryStructure: structure?.entryStructure ?? null,
+        liquidityLevels: structure?.levels ?? [],
         macro,
         quant: quant ?? null,
         sessionReport,
         management,
+        fourHourStructure: structure?.mtf.timeframes.find(r => r.timeframe === '240')?.structure ?? null,
         quote,
         connection: quote ? "connected" : "disconnected",
         settings,
@@ -401,7 +403,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         cycleId,
         action: decision.action,
         blocked: openBlocked,
-        direction: analysis?.setup?.direction ?? null,
+        direction: decision.plans[0]?.direction ?? null,
         entry: analysis?.setup?.entry ?? null,
         stop_loss: analysis?.setup?.stop_loss ?? null,
         take_profit_1: analysis?.setup?.take_profit_1 ?? null,
@@ -444,6 +446,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         latency: {},
         payload: {
           source: "cron",
+          trading_style: 'swing',
           confidence_floor: decision.confidenceFloor,
           tier: decision.adaptive.tier,
           trading_mode: tradingMode,

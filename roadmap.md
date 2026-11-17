@@ -1,4 +1,8 @@
 # Roadmap
+- [ ] Replace automated entries with Daily / 4H / 1H swing setups
+- [ ] Add multi-day management, structural trailing, and duplicate-setup protection
+- [ ] Show swing policy and verify automated decision flow with regression tests
+- [ ] Validate weekly frequency and profitability (requires sufficient historical and forward-test results; no guaranteed trade quota)
 - [ ] Finish the approved interface and forward-study continuation
   - [ ] Plain-English ICT tooltips
   - [ ] Shared motion and mobile navigation/overflow polish
