@@ -306,7 +306,6 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         quant: quant ?? null,
         sessionReport,
         management,
-        fourHourStructure: structure?.mtf.timeframes.find(r => r.timeframe === '240')?.structure ?? null,
         quote,
         connection: quote ? "connected" : "disconnected",
         settings,
@@ -331,6 +330,7 @@ async function runTickCycle(supabaseAdmin: any, opts: TickCycleOptions = {}) {
         price: quote?.mid ?? null,
         atr: quant?.volatility.atr ?? null,
         management,
+        fourHourStructure: structure?.mtf.timeframes.find(r => r.timeframe === '240')?.structure ?? null,
       });
       for (const a of actions) {
         // An unconfirmed broker close/modify throws and flags the trade for

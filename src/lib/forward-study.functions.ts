@@ -31,7 +31,7 @@ export const getForwardStudy = createServerFn({ method: "POST" })
     let rowsQuery = data.tab === "decisions"
       ? db.from("decision_logs").select("*", { count: "exact" }).eq("study_id", study.id).eq("user_id", context.userId).order("decided_at", { ascending: false }).order("id")
       : db.from("trades").select("*", { count: "exact" }).eq("study_id", study.id).eq("user_id", context.userId).order("opened_at", { ascending: false }).order("id");
-    if (data.tab === "decisions" && data.outcome) rowsQuery = rowsQuery.eq("outcome", data.outcome);
+    if (data.tab === "decisions" && data.outcome) rowsQuery = (rowsQuery as any).eq("outcome", data.outcome);
     const pageResult = await rowsQuery.range(data.page * 50, data.page * 50 + 49);
     if (pageResult.error) throw new Error("Could not load study history.");
     let cumulative = 0;
