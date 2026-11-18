@@ -7,6 +7,7 @@ import { ConfidenceBreakdownPanel } from "@/components/ConfidenceBreakdownPanel"
 import { ManualOrderTicket } from "@/components/ManualOrderTicket";
 import { ExecutionStatePanel } from "@/components/ExecutionStatePanel";
 import { ManualCyclePanel } from "@/components/autopilot/ManualCyclePanel";
+import { SwingPolicyPanel } from "@/components/autopilot/SwingPolicyPanel";
 import { DemoFloorPanel } from "@/components/autopilot/DemoFloorPanel";
 import { Term } from "@/components/Term";
 
@@ -113,6 +114,8 @@ function Autopilot() {
       </div>
 
       {/* Authoritative, server-derived execution & arming state */}
+      <SwingPolicyPanel />
+
       <ExecutionStatePanel />
 
       <DemoFloorPanel />
