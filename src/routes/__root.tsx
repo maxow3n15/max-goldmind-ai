@@ -45,8 +45,10 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   const diag = getDiagnostics();
   useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component", ...diag });
-    console.error("[GoldMind diagnostics]", diag);
+    // Never send or log personal data (email) with crash reports.
+    const { userEmail: _omit, ...safeDiag } = diag;
+    reportLovableError(error, { boundary: "tanstack_root_error_component", ...safeDiag });
+    console.error("[GoldMind diagnostics]", safeDiag);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [error]);
 
